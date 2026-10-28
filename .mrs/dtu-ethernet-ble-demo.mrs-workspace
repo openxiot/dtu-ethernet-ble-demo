@@ -1,0 +1,27 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"name": "dtu-ethernet-ble-demo",
+			"path": "/Users/ouyang/works/openxiot/dtu/dtu-ethernet-ble-demo"
+		}
+	],
+	"settings": {
+		"mrs.workspace.type": "project",
+		"mrs.init.arg": "",
+		"files.associations": {
+			"*.c": "c",
+			"*.h": "cpp",
+			"*.hxx": "cpp",
+			"*.hpp": "cpp",
+			"*.c++": "cpp",
+			"*.cpp": "cpp",
+			"*.cxx": "cpp",
+			"*.cc": "cpp",
+			"*.hh": "cpp",
+			"*.h++": "cpp"
+		}
+	}
+}
