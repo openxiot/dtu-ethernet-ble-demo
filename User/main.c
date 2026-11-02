@@ -40,6 +40,25 @@ void TIM2_Init(void)
 }
 
 /*********************************************************************
+ * @fn      reset_reason
+ *
+ * @brief   读取 RCC 复位标志，打印上次复位原因（协助定位异常重启）。
+ *          NVIC_SystemReset（含 HardFault_Handler）会留下 SFTRST 标志。
+ *
+ * @return  原因字符串
+ */
+static const char *reset_reason(void)
+{
+    if (RCC_GetFlagStatus(RCC_FLAG_PORRST)  != RESET) return "power-on";
+    if (RCC_GetFlagStatus(RCC_FLAG_PINRST)  != RESET) return "reset pin";
+    if (RCC_GetFlagStatus(RCC_FLAG_SFTRST)  != RESET) return "software(HardFault/WCH-Link)";
+    if (RCC_GetFlagStatus(RCC_FLAG_IWDGRST) != RESET) return "IWDG";
+    if (RCC_GetFlagStatus(RCC_FLAG_WWDGRST) != RESET) return "WWDG";
+    if (RCC_GetFlagStatus(RCC_FLAG_LPWRRST) != RESET) return "low-power";
+    return "unknown";
+}
+
+/*********************************************************************
  * @fn      main
  *
  * @brief   Main program body.
@@ -53,6 +72,8 @@ int main(void)
 
     SystemCoreClockUpdate();
     printf("DTU boot, SystemClk:%d\r\n", (uint32_t)SystemCoreClock);
+    printf("reset: %s\r\n", reset_reason());
+    RCC_ClearFlag();
     if ((SystemCoreClock != 120000000) && (SystemCoreClock != 60000000)) {
         printf("WARN: 以太网要求 60/120MHz，请检查 system_ch32v20x.c 时钟配置\r\n");
     }

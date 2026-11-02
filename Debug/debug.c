@@ -245,16 +245,36 @@ int _write(int fd, char *buf, int size)
  *
  * @return  size: Data length
  */
+static char *s_heap_curbrk;   /* 当前 heap 顶，由 _sbrk 维护（供内存诊断用） */
+
 __attribute__((used))
 void *_sbrk(ptrdiff_t incr)
 {
     extern char _end[];
     extern char _heap_end[];
-    static char *curbrk = _end;
 
-    if ((curbrk + incr < _end) || (curbrk + incr > _heap_end))
+    if (!s_heap_curbrk) s_heap_curbrk = _end;
+    if ((s_heap_curbrk + incr < _end) || (s_heap_curbrk + incr > _heap_end))
     return NULL - 1;
 
-    curbrk += incr;
-    return curbrk - incr;
+    s_heap_curbrk += incr;
+    return s_heap_curbrk - incr;
+}
+
+/* heap 已用/剩余字节数（已用为历史峰值，free() 不会回退 brk） */
+uint32_t debug_heap_used(void)
+{
+    extern char _end[];
+    if (!s_heap_curbrk) s_heap_curbrk = _end;
+    return (uint32_t)(s_heap_curbrk - _end);
+}
+
+uint32_t debug_heap_free(void)
+{
+    extern char _heap_end[];
+    if (!s_heap_curbrk) {
+        extern char _end[];
+        s_heap_curbrk = _end;
+    }
+    return (uint32_t)(_heap_end - s_heap_curbrk);
 }

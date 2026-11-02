@@ -78,14 +78,30 @@ static void on_ws_bin(ws_client_t *ws, const uint8_t *data, uint32_t len)
 
 static void on_ws_close(ws_client_t *ws, uint16_t code)
 {
-    (void)ws;
     printf("[ws close] code=%u\r\n", code);
     g_st = ST_DOWN;
     wss_tls_close();
-    transport_eth_reconnect();   /* 服务端关闭 -> 让传输层重连 */
+    if (ws->close_dup) {
+        /* 服务端认为该 IMEI 已有在线会话：拉长间隔，避免反复顶撞 */
+        printf("device already online elsewhere, retry in 60s\r\n");
+        transport_eth_reconnect_delay(60000);
+    } else {
+        transport_eth_reconnect();   /* 服务端关闭 -> 让传输层重连 */
+    }
 }
 
 /* ==================== 上报 ==================== */
+static void send_heartbeat(void)
+{
+    uint32_t i;
+
+    if (ws_send_bin(&g_ws, g_heartbeat, sizeof(g_heartbeat)) == 0) {
+        printf("[send] heartbeat %u bytes: ", (unsigned)sizeof(g_heartbeat));
+        for (i = 0; i < sizeof(g_heartbeat); i++) printf("%02x ", g_heartbeat[i]);
+        printf("\r\n");
+    }
+}
+
 static void report_csq(void)
 {
     char buf[32];
@@ -161,6 +177,7 @@ void dtu_app_poll(void)
     if (g_st == ST_DOWN) {
         /* 传输在线：初始化 TLS，进入 TLS 握手阶段（合作式，逐轮轮询） */
         g_st = ST_TLS;
+        printf("TCP online, TLS handshake start\r\n");
         wss_tls_init();
         return;
     }
@@ -176,6 +193,7 @@ void dtu_app_poll(void)
             return;
         }
         g_st = ST_WS;                   /* TLS 完成，进入 WebSocket 握手 */
+        printf("TLS handshake done, WS handshake start\r\n");
         g_ws.open = 0;
         g_ws.hs_state = 0;              /* 重置 WS 握手状态机 */
         return;
@@ -185,8 +203,11 @@ void dtu_app_poll(void)
         int hr = ws_client_handshake(&g_ws, DTU_HOST, g_port_str, g_ws_path);
         if (hr == 0) {
             g_st = ST_OPEN;
-            g_last_hb = g_last_csq = g_last_loc = now;
+            g_last_hb = now;
             printf("WebSocket open\r\n");
+            /* 连接建立后立即发一次心跳：服务端可能靠首帧把会话绑定到设备 */
+            send_heartbeat();
+            g_last_csq = g_last_loc = now;
         } else if (hr < 0) {
             printf("WS handshake fail\r\n");
             wss_tls_close();
@@ -210,7 +231,7 @@ void dtu_app_poll(void)
     /* 定时上报 */
     if ((uint32_t)(now - g_last_hb) >= (uint32_t)(DTU_HEARTBEAT_INTERVAL_S * 1000u)) {
         g_last_hb = now;
-        ws_send_bin(&g_ws, g_heartbeat, sizeof(g_heartbeat));
+        send_heartbeat();
     }
     if ((uint32_t)(now - g_last_csq) >= (uint32_t)(DTU_CSQ_INTERVAL_S * 1000u)) {
         g_last_csq = now;

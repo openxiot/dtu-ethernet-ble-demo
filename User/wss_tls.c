@@ -41,6 +41,7 @@ void wss_tls_close(void) { }
 #include "mbedtls/entropy.h"
 #include "mbedtls/ctr_drbg.h"
 #include "mbedtls/error.h"
+#include "debug.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -73,13 +74,27 @@ static int weak_entropy(void *p, unsigned char *out, size_t len, size_t *olen)
 /* ---------------- mbedTLS BIO：桥接到 WCHNET TCP ---------------- */
 /* send：全部写出的字节或 WANT_WRITE；recv：读到的字节或 WANT_READ。 */
 
+/* 累计收发字节（transport_eth.c 维护），用于握手失败时定位卡在哪一步 */
+extern uint32_t g_tcp_tx_bytes;
+extern uint32_t g_tcp_rx_bytes;
+
+/* BIO 层失败诊断（限次打印，避免刷屏） */
+static void tls_bio_fail(const char *dir)
+{
+    static int n;
+    if (n++ < 6)
+        printf("[tls] bio %s fail: online=%d tx=%lu rx=%lu\r\n", dir,
+               transport_is_online(),
+               (unsigned long)g_tcp_tx_bytes, (unsigned long)g_tcp_rx_bytes);
+}
+
 static int net_send(void *ctx, const unsigned char *buf, size_t len)
 {
     int n;
     (void)ctx;
-    if (!transport_is_online()) return MBEDTLS_ERR_SSL_CONN_EOF;
+    if (!transport_is_online()) { tls_bio_fail("send(offline)"); return MBEDTLS_ERR_SSL_CONN_EOF; }
     n = transport_tcp_write(buf, (uint32_t)len);
-    if (n < 0) return MBEDTLS_ERR_SSL_CONN_EOF;
+    if (n < 0) { tls_bio_fail("send"); return MBEDTLS_ERR_SSL_CONN_EOF; }
     if (n == 0) return MBEDTLS_ERR_SSL_WANT_WRITE;   /* 发送缓冲满，稍后重试 */
     return n;
 }
@@ -88,11 +103,24 @@ static int net_recv(void *ctx, unsigned char *buf, size_t len)
 {
     int n;
     (void)ctx;
-    if (!transport_is_online()) return MBEDTLS_ERR_SSL_CONN_EOF;
+    if (!transport_is_online()) { tls_bio_fail("recv(offline)"); return MBEDTLS_ERR_SSL_CONN_EOF; }
     n = transport_tcp_read(buf, (uint32_t)len);
-    if (n < 0) return MBEDTLS_ERR_SSL_CONN_EOF;      /* 连接已断开 */
+    if (n < 0) { tls_bio_fail("recv"); return MBEDTLS_ERR_SSL_CONN_EOF; }  /* 连接已断开 */
     if (n == 0) return MBEDTLS_ERR_SSL_WANT_READ;    /* 暂无可读，稍后重试 */
     return n;
+}
+
+/* ---------------- 诊断：mbedTLS 错误码 + heap 用量 ---------------- */
+static void tls_print_err(const char *what, int ret)
+{
+    char eb[96];
+
+    eb[0] = 0;
+    mbedtls_strerror(ret, eb, sizeof eb);
+    printf("[tls] %s fail %04X %s (state=%d tx=%lu rx=%lu heap used=%lu free=%lu)\r\n",
+           what, (unsigned)ret, eb, ssl.state,
+           (unsigned long)g_tcp_tx_bytes, (unsigned long)g_tcp_rx_bytes,
+           (unsigned long)debug_heap_used(), (unsigned long)debug_heap_free());
 }
 
 /* ---------------- 对外接口 ---------------- */
@@ -111,10 +139,12 @@ void wss_tls_init(void)
 
     ret = mbedtls_entropy_add_source(&entropy, weak_entropy, NULL, 256,
                                      MBEDTLS_ENTROPY_SOURCE_STRONG);
-    if (ret != 0) { printf("[tls] entropy source fail %04X\r\n", (unsigned)ret); return; }
+    if (ret != 0) { tls_print_err("entropy source", ret); return; }
     if (mbedtls_ctr_drbg_seed(&drbg, mbedtls_entropy_func, &entropy,
                               (const unsigned char *)DTU_IMEI, strlen(DTU_IMEI)) != 0) {
-        printf("[tls] ctr_drbg seed fail\r\n"); return;
+        printf("[tls] ctr_drbg seed fail (heap free=%lu)\r\n",
+               (unsigned long)debug_heap_free());
+        return;
     }
 }
 
@@ -125,20 +155,28 @@ int wss_tls_handshake(void)
     if (!transport_is_online()) return -2;
 
     if (!tls_started) {
+        printf("[tls] setup start, heap used=%lu free=%lu\r\n",
+               (unsigned long)debug_heap_used(), (unsigned long)debug_heap_free());
+
         ret = mbedtls_ssl_config_defaults(&conf,
                      MBEDTLS_SSL_IS_CLIENT,
                      MBEDTLS_SSL_TRANSPORT_STREAM,
                      MBEDTLS_SSL_PRESET_DEFAULT);
-        if (ret != 0) return -3;
+        if (ret != 0) { tls_print_err("config_defaults", ret); return -3; }
 
         /* 最小化：不校验证书链以省 RAM（正式环境建议 mbedtls_ssl_conf_ca_chain
          * 校验服务器，并权衡 SRAM；也可内嵌/固定服务器证书而只启 MBEDTLS_SSL_VERIFY_OPTIONAL）。 */
         mbedtls_ssl_conf_authmode(&conf, MBEDTLS_SSL_VERIFY_NONE);
         mbedtls_ssl_conf_rng(&conf, mbedtls_ctr_drbg_random, &drbg);
 
-        if (mbedtls_ssl_setup(&ssl, &conf) != 0) return -4;
+        ret = mbedtls_ssl_setup(&ssl, &conf);
+        if (ret != 0) { tls_print_err("ssl_setup", ret); return -4; }
+        printf("[tls] ssl_setup ok, heap used=%lu free=%lu\r\n",
+               (unsigned long)debug_heap_used(), (unsigned long)debug_heap_free());
+
         mbedtls_ssl_set_bio(&ssl, NULL, net_send, net_recv, NULL);
-        if (mbedtls_ssl_set_hostname(&ssl, DTU_HOST) != 0) return -5;
+        ret = mbedtls_ssl_set_hostname(&ssl, DTU_HOST);
+        if (ret != 0) { tls_print_err("set_hostname", ret); return -5; }
 
         tls_started = 1;
     }
@@ -151,12 +189,8 @@ int wss_tls_handshake(void)
     if (ret == MBEDTLS_ERR_SSL_WANT_READ ||
         ret == MBEDTLS_ERR_SSL_WANT_WRITE)
         return 1;                                  /* 进行中 */
-    {
-        char eb[80];
-        mbedtls_strerror(ret, eb, sizeof eb);
-        printf("[tls] handshake fail %04X %s\r\n", (unsigned)ret, eb);
-        return -6;                                 /* 失败 */
-    }
+    tls_print_err("handshake", ret);
+    return -6;                                     /* 失败 */
 }
 
 int wss_tls_read(uint8_t *buf, uint32_t maxlen)

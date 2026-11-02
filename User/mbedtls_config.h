@@ -28,6 +28,9 @@
 #define MBEDTLS_SSL_SERVER_NAME_INDICATION    /* SNI */
 
 /* TLS 记录缓冲：输入需容纳服务器证书链(~3.7K)，输出只发 ClientHello 等小消息 */
+/* 打开错误码转字符串，握手失败时能打印可读原因（Flash 占用略增，调试期建议开）。 */
+#define MBEDTLS_ERROR_C
+
 #define MBEDTLS_SSL_MAX_CONTENT_LEN     4096
 #define MBEDTLS_SSL_IN_CONTENT_LEN      4096
 #define MBEDTLS_SSL_OUT_CONTENT_LEN     512
@@ -62,8 +65,7 @@
 #define MBEDTLS_X509_USE_C
 #define MBEDTLS_X509_CRT_PARSE_C
 
-/* ============ 错误信息（不用完整字符串表，仅提供 mbedtls_strerror 桩） ============ */
-#define MBEDTLS_ERROR_STRERROR_DUMMY
+/* 错误码转字符串由上方 MBEDTLS_ERROR_C 提供（不再使用 DUMMY 桩）。 */
 
 /* ============ 随机数 ============ */
 #define MBEDTLS_ENTROPY_C

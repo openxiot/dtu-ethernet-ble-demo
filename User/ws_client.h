@@ -32,6 +32,7 @@ typedef void (*ws_close_cb)(struct ws_client *ws, uint16_t code);
 typedef struct ws_client {
     ws_io_t  io;
     int      open;                 /* 握手成功后置 1 */
+    uint8_t  close_dup;            /* 服务端以 "device already online/duplicate" 关闭 */
 
     /* 发送缓冲：tx[0..hdr) 放帧头+掩码，tx[hdr..) 放负载 */
     uint8_t  tx[WS_TX_SIZE];

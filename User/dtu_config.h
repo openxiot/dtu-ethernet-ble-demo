@@ -18,7 +18,7 @@
 /* ============ 1. 设备身份 ============ */
 /* 设备 IMEI（模拟值，可改成真实 IMEI）。仅数字 0-9，15~17 位。
  * demo 用与正式板不同的 IMEI，便于服务端区分两台设备。 */
-#define DTU_IMEI                    "869999042529386"
+#define DTU_IMEI                    "000012345678901"
 /* 组织标识（服务端 URL 的 orgId 段），对应服务端 organizations/{env}/yinerda */
 #define DTU_ORG_ID                  "yinerda"
 /* 设备型号（model 段），目前服务端只支持这两个：
@@ -64,6 +64,8 @@
 /* ============ 5. 断线重连（指数退避） ============ */
 #define DTU_RECONNECT_MIN_MS        5000L       /* 重连最短延时 */
 #define DTU_RECONNECT_MAX_MS        60000L      /* 重连最长延时(退避上限) */
+/* DHCP 一直无回调时自动重启 DHCP 客户端的间隔（链路 up 后仍拿不到地址时用） */
+#define DTU_DHCP_RETRY_MS           20000L
 
 /* ============ 6. 传输开关 ============ */
 /* 1=启用 TLS 走 wss（需已接入 mbedTLS 源码，见 User/mbedtls_config.h 与 README 第五节）；

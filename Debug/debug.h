@@ -44,6 +44,8 @@ void Delay_Us(uint32_t n);
 void Delay_Ms(uint32_t n);
 void USART_Printf_Init(uint32_t baudrate);
 void SDI_Printf_Enable(void);
+uint32_t debug_heap_used(void);
+uint32_t debug_heap_free(void);
 
 #if(DEBUG)
   #define PRINT(format, ...)    printf(format, ##__VA_ARGS__)

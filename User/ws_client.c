@@ -52,6 +52,7 @@ void ws_client_init(ws_client_t *ws, const ws_io_t *io, uint32_t seed)
     ws->io = *io;
     ws->fifo_head = ws->fifo_tail = 0;
     ws->mask_key = seed;
+    ws->close_dup = 0;
     ws_rand_state = seed ? seed : 0x9E3779B9u;
 }
 
@@ -100,6 +101,7 @@ int ws_client_handshake(ws_client_t *ws, const char *host, const char *port,
         case 0: {   /* 发送 HTTP Upgrade 请求 */
             uint8_t nonce[16];
             int i;
+            ws->close_dup = 0;          /* 新一轮握手，清掉上次的关闭标记 */
             for (i = 0; i < 16; i++) nonce[i] = (uint8_t)ws_next_rand();
             n = ws_base64_encode(nonce, 16, ws->hs_key);
             ws->hs_key[n] = '\0';
@@ -315,7 +317,23 @@ int ws_client_poll(ws_client_t *ws)
 
         /* 控制帧：close / ping / pong */
         if (op == 0x8) {                    /* close */
+            char rs[64];
+            uint32_t rl = 0;
+
+            /* 回送 close 帧完成关闭握手，服务端可据此尽快释放本设备会话 */
+            ws_send_frame(ws, 0x8, NULL, 0, 0);
+
             ws->open = 0;
+            /* 打印 close 帧原因（服务端常在这里写拒绝理由），便于定位 */
+            if (paylen > 2) {
+                rl = (uint32_t)paylen - 2;
+                if (rl > sizeof(rs) - 1) rl = sizeof(rs) - 1;
+                memcpy(rs, &ws->payload[2], rl);
+                rs[rl] = '\0';
+                printf("[ws] close reason: %s\r\n", rs);
+                if (strstr(rs, "duplicate") || strstr(rs, "already online"))
+                    ws->close_dup = 1;
+            }
             if (ws->on_close) ws->on_close(ws, (paylen >= 2) ?
                          ((uint16_t)ws->payload[0] << 8 | ws->payload[1]) : 1005);
             handled = 1; break;

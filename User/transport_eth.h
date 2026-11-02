@@ -31,7 +31,10 @@ void transport_eth_poll(void);
 int transport_tcp_read(uint8_t *buf, uint32_t maxlen);
 int transport_tcp_write(const uint8_t *buf, uint32_t len);
 
-/* 立即触发一次重连（回到 DNS→连接）。 */
+/* 立即触发一次重连（回到 DNS→连接，按指数退避）。 */
 void transport_eth_reconnect(void);
+
+/* 触发重连，但等 ms 毫秒后再重试（用于服务端重复会话等需等待的场景）。 */
+void transport_eth_reconnect_delay(uint32_t ms);
 
 #endif /* __TRANSPORT_ETH_H__ */

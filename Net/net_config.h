@@ -22,7 +22,10 @@ extern "C" {
  */
 #define WCHNET_NUM_IPRAW              0  /* Number of IPRAW connections */
 
-#define WCHNET_NUM_UDP                0  /* The number of UDP connections */
+/* DHCP 客户端和 DNS 解析器内部都通过 udp_new() 申请 UDP PCB：
+ * DHCP 启动后常驻占 1 个，DNS 初始化再占 1 个，所以至少要为 2。
+ * 置 0 时 WCHNET_DHCPStart() 会返回 0x11(WCHNET_ERR_MEM) 且不发 DISCOVER。 */
+#define WCHNET_NUM_UDP                2  /* The number of UDP connections (DHCP + DNS) */
 
 #define WCHNET_NUM_TCP                1  /* Number of TCP connections */
 
@@ -31,9 +34,10 @@ extern "C" {
 /* The number of sockets, the maximum is 31  */
 #define WCHNET_MAX_SOCKET_NUM         (WCHNET_NUM_IPRAW+WCHNET_NUM_UDP+WCHNET_NUM_TCP+WCHNET_NUM_TCP_LISTEN)
 
-/* MSS 由 1460 降到 1024：配合下方 RECE_BUF_LEN 一起降低静态 RAM 占用，
- * 给 mbedTLS 运行时缓冲腾 heap（DTU 数据量很小，1024 足够；TLS 大证书记录由 TCP 分片重组）。 */
-#define WCHNET_TCP_MSS                1024  /* Size of TCP MSS*/
+/* MSS 由 1460 降到 536：配合下方 RECE_BUF_LEN/POOL_BUF 一起降低静态 RAM 占用，
+ * 给 mbedTLS 运行时缓冲腾 heap（TLS 握手要 4KB 记录缓冲 + RSA 大数临时内存）。
+ * TLS 大证书记录由 TCP 分片、mbedTLS 逐段读取后再在记录缓冲内重组。 */
+#define WCHNET_TCP_MSS                536  /* Size of TCP MSS*/
 
 #define WCHNET_NUM_POOL_BUF           (WCHNET_NUM_TCP*2+2)   /* The number of POOL BUFs, the number of receive queues */
 
@@ -89,7 +93,7 @@ extern "C" {
 
 #define WCHNET_MEM_HEAP_SIZE          (((WCHNET_TCP_MSS+0x10+54+8)*WCHNET_NUM_TCP_SEG)+ETH_TX_BUF_SZE+64+2*0x18) /* memory heap size */
 
-#define WCHNET_NUM_ARP_TABLE          50   /* Number of ARP lists */
+#define WCHNET_NUM_ARP_TABLE          8    /* Number of ARP lists（局域网内够用，省 RAM） */
 
 #define WCHNET_MEM_ALIGNMENT          4    /* 4 byte alignment */
 
