@@ -1,0 +1,1387 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CH32V208 DTU 固件升级方案（IAP · 串口 / 网络）</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --panel:#ffffff; --ink:#1b1f24; --muted:#5b6672;
+    --line:#dfe3e8; --brand:#1f5fbf; --brand-soft:#eaf1fb;
+    --ok:#1f7a4d; --ok-soft:#e8f5ee;
+    --warn:#9a6200; --warn-soft:#fff4de;
+    --risk:#a52a2a; --risk-soft:#fdecec;
+    --code-bg:#0f172a; --code-ink:#e6edf7;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.7;font-size:15px}
+  a{color:var(--brand);text-decoration:none}
+  a:hover{text-decoration:underline}
+  code{font-family:var(--mono);font-size:.92em;background:#eef1f5;padding:.12em .35em;border-radius:4px}
+  pre{font-family:var(--mono);background:var(--code-bg);color:var(--code-ink);padding:16px 18px;border-radius:10px;overflow:auto;font-size:13px;line-height:1.55}
+  pre code{background:none;color:inherit;padding:0;font-size:inherit}
+  .hero{background:linear-gradient(135deg,#12263f 0%,#1f4f8f 55%,#2b6cb0 100%);color:#fff;padding:44px 28px 38px}
+  .hero-inner{max-width:1200px;margin:0 auto}
+  .eyebrow{font-size:12px;letter-spacing:.18em;text-transform:uppercase;opacity:.75;margin:0 0 10px}
+  h1{margin:0 0 12px;font-size:30px;line-height:1.3;font-weight:700}
+  .sub{margin:0;max-width:900px;color:#dbe7f6;font-size:15px}
+  .badges{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px}
+  .badge{display:inline-block;padding:4px 11px;border-radius:999px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.25);font-size:12px}
+  .layout{max-width:1200px;margin:0 auto;padding:28px;display:grid;grid-template-columns:250px minmax(0,1fr);gap:32px}
+  nav.toc{position:sticky;top:18px;align-self:start;max-height:calc(100vh - 36px);overflow:auto;font-size:13px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  nav.toc h2{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+  nav.toc ol{margin:0;padding-left:18px}
+  nav.toc li{margin:6px 0}
+  nav.toc a{color:#33404d}
+  main{min-width:0}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:26px 28px;margin:0 0 22px}
+  section h2{margin:0 0 16px;font-size:21px;line-height:1.35;border-bottom:1px solid var(--line);padding-bottom:10px}
+  section h3{margin:26px 0 10px;font-size:16.5px}
+  section h4{margin:18px 0 8px;font-size:14.5px}
+  p{margin:9px 0}
+  ul,ol{margin:9px 0;padding-left:22px}
+  li{margin:5px 0}
+  table{border-collapse:collapse;width:100%;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:#f1f4f8;font-weight:600;white-space:nowrap}
+  tr:nth-child(even) td{background:#fafbfc}
+  .table-wrap{overflow-x:auto;margin:12px 0}
+  .table-wrap table{margin:0;min-width:620px}
+  .callout{border-left:4px solid var(--brand);background:var(--brand-soft);padding:12px 16px;border-radius:0 8px 8px 0;margin:14px 0}
+  .callout.ok{border-color:var(--ok);background:var(--ok-soft)}
+  .callout.warn{border-color:var(--warn);background:var(--warn-soft)}
+  .callout.risk{border-color:var(--risk);background:var(--risk-soft)}
+  .callout strong{display:block;margin-bottom:3px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .card{border:1px solid var(--line);border-radius:10px;padding:14px 16px;background:#fcfcfd}
+  .card h4{margin:0 0 6px;font-size:14px}
+  .card p{margin:4px 0;font-size:13.5px;color:#39434d}
+  .kbd{font-family:var(--mono);font-size:12px;background:#eef1f5;border:1px solid #d6dbe2;border-bottom-width:2px;border-radius:4px;padding:1px 5px}
+  .arch{display:grid;grid-template-columns:1fr 1.2fr 1fr;gap:14px;align-items:stretch;margin:16px 0}
+  .arch .box{border:1.5px solid #b9c7d8;border-radius:10px;padding:12px;background:#fbfdff}
+  .arch .box h4{margin:0 0 6px;font-size:14px;color:#173a66}
+  .arch .box ul{margin:4px 0;padding-left:18px;font-size:12.5px;color:#3c4855}
+  .arch .device{border:2px dashed #7b9cc4;background:#f7faff}
+  .arrowline{text-align:center;color:#5b7699;font-size:12px;margin:2px 0}
+  .flow{background:#0f172a;color:#dbe8f7;border-radius:10px;padding:16px 18px;font-family:var(--mono);font-size:13px;line-height:1.65;overflow:auto;white-space:pre}
+  .tag{display:inline-block;padding:1px 7px;border-radius:4px;font-size:11.5px;font-weight:600;vertical-align:middle}
+  .tag.must{background:#fdecec;color:#a52a2a}
+  .tag.rec{background:#e8f5ee;color:#1f7a4d}
+  .tag.opt{background:#fff4de;color:#9a6200}
+  .tag.todo{background:#eaf1fb;color:#1f5fbf}
+  .small{font-size:12.5px;color:var(--muted)}
+  .mono{font-family:var(--mono)}
+  .nowrap{white-space:nowrap}
+  details{border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin:10px 0;background:#fcfcfd}
+  summary{cursor:pointer;font-weight:600}
+  footer{max-width:1200px;margin:0 auto;padding:8px 28px 40px;color:var(--muted);font-size:12.5px}
+  @media (max-width: 960px){
+    .layout{grid-template-columns:1fr;padding:18px}
+    nav.toc{position:static;max-height:none}
+    .grid2,.arch{grid-template-columns:1fr}
+    section{padding:20px 18px}
+    h1{font-size:24px}
+  }
+  @media print{
+    body{background:#fff}
+    .hero{background:#12263f !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    nav.toc{display:none}
+    .layout{display:block;padding:0}
+    section{break-inside:avoid;border:none;padding:0 0 18px;margin:0 0 18px}
+    a{color:inherit;text-decoration:none}
+  }
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Design Review · Firmware Update</p>
+    <h1>CH32V208 DTU 固件升级方案</h1>
+    <p class="sub">覆盖「串口发送固件文件」与「网络升级」两条通道：串口只走调试串口（USART1），按帧传输 <code>.dtufw</code> 包，不占用 RS-485 业务口；网络由服务端通过 WebSocket 下发固定格式通知（固件 <b>HTTPS</b> 地址、大小、版本），设备收到后主动发 <b>HTTPS GET</b> 下载固件包。本文回答 IAP / ISP 选型，给出 Flash 分区、启动流程、包格式、协议、安全与可靠性设计。本次补充容量规划与 A/B 双分区备选评估。评审稿，暂未改动代码。</p>
+    <div class="badges">
+      <span class="badge">工程：dtu-ethernet-ble-demo</span>
+      <span class="badge">芯片：CH32V208WBU6</span>
+      <span class="badge">方案版本：v0.4（草案）</span>
+      <span class="badge">串口升级：仅调试串口</span>
+      <span class="badge">网络升级：WS 通知 + HTTPS GET</span>
+      <span class="badge">日期：2026-11-03</span>
+      <span class="badge">状态：待 Review</span>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+<nav class="toc">
+  <h2>目录</h2>
+  <ol>
+    <li><a href="#summary">结论先行</a></li>
+    <li><a href="#status">现状与约束</a></li>
+    <li><a href="#iap-isp">IAP 还是 ISP</a></li>
+    <li><a href="#arch">总体架构</a></li>
+    <li><a href="#layout">Flash 分区</a></li>
+    <li><a href="#boot">启动流程与元数据</a></li>
+    <li><a href="#image">固件包与校验</a></li>
+    <li><a href="#serial">串口升级协议</a></li>
+    <li><a href="#network">网络升级协议</a></li>
+    <li><a href="#security">安全设计</a></li>
+    <li><a href="#reliability">可靠性与异常</a></li>
+    <li><a href="#budget">资源与性能预算</a></li>
+    <li><a href="#code">代码结构与构建</a></li>
+    <li><a href="#plan">分阶段实施</a></li>
+    <li><a href="#test">测试计划</a></li>
+    <li><a href="#decisions">决策记录</a></li>
+    <li><a href="#refs">参考资料</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<!-- ============================================================ -->
+<section id="summary">
+  <h2>1. 结论先行</h2>
+
+  <div class="callout ok">
+    <strong>建议采用 IAP，不采用 ISP。</strong>
+    串口升级和网络升级都由我们自己的 <b>Bootloader + App</b> 完成；芯片出厂的 ISP Bootloader 只保留为产线首烧与救砖手段。
+  </div>
+
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th style="width:30%">问题</th><th>结论</th></tr></thead>
+    <tbody>
+      <tr><td>用 IAP 还是 ISP？</td><td><b>IAP</b>。ISP 需要 BOOT0 跳线、断电复位和 PC 端工具，出厂 Bootloader 不含以太网协议栈，无法做网络升级，也不适合现场设备。</td></tr>
+      <tr><td>「串口发送固件升级」是 ISP 吗？</td><td>不是。串口升级是 <b>IAP over UART</b>：由我们的 Bootloader 接收镜像、写 Flash、校验、跳转。ISP 是芯片内部固化的下载模式。</td></tr>
+      <tr><td>网络升级怎么做？</td><td>服务端在现有 WebSocket 上下发一条 <b>OTA 通知</b>（固件 <b>HTTPS</b> 地址、文件大小、版本号）；App 解析地址后关闭 WS，用同一个 TCP socket 建立 TLS 连接并发 <b>HTTPS GET</b> 下载 <code>.dtufw</code> 包，写入 <b>Staging</b>；校验签名后复位，由 Bootloader 搬运到 App 区。TLS 不做证书校验，只提供加密通道；固件真实性由包内 RSA 签名保证。</td></tr>
+      <tr><td>下载时 WS 还连着吗？</td><td>不连。当前 <code>WCHNET_NUM_TCP=1</code>，WS 和 HTTPS 不能同时存在。App 先关闭 WS/TLS，再用同一个 socket 建立到固件服务器的 TLS 连接并下载；完成后复位，重启后重连并上报结果。不建议把 TCP 数提到 2（约多 2 KB RAM，会吃掉 TLS 余量）。</td></tr>
+      <tr><td>App 能不能自己覆盖自己？</td><td>不能安全地做。运行中的 App 不能擦除自身代码区，因此必须有独立 Bootloader，并先把新镜像放到 Staging。</td></tr>
+      <tr><td>Flash 够不够？</td><td>当前布局刚好占满 480 KB：App 144 KB、Staging 160 KB、Backup 152 KB。新增 HTTPS 客户端后 App 预计 135–140 KB，余量 4–9 KB，<b>偏紧</b>。真正的瓶颈是 160 KB 零等待区：App 槽 = 160 KB − Bootloader，三份镜像又把硬上限压到约 153 KB；详见 5.4 与决策 13。</td></tr>
+      <tr><td>升级失败会不会变砖？</td><td>Bootloader 自身永不升级；只有 Staging 校验通过才会动 App 区；搬运中断可在下次启动重试；预留 Backup 区可扩展自动回滚。产线不开启 WRP，Bootloader 的保护依赖分区边界与代码约束。</td></tr>
+      <tr><td>要不要做 A/B 双分区？</td><td><b>不推荐</b>。A/B 只需两份镜像、回滚免费，但 CH32V208 只有 160 KB 零等待区，两个 144 KB 槽必有一个落在非零等待区，每隔一版运行变慢；还需两套链接地址、双构建和双包发布。方案与对比见 5.5，结论见决策 20。</td></tr>
+      <tr><td>需要改服务器吗？</td><td>需要。服务端要能通过 <b>HTTPS</b> 托管 <code>.dtufw</code> 固件包（建议支持 Content-Length 与 Range），在 WS 上下发 OTA 通知，并处理设备重启后的版本/结果上报。</td></tr>
+      <tr><td>两条通道协议是否统一？</td><td>统一在<b>固件包</b>上。串口按帧传输同一个 <code>.dtufw</code> 文件；网络用 HTTPS GET 下载同一个文件；设备端共用一套包头解析、CRC32/SHA-256/RSA 校验和 Staging 写入逻辑。</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>1.1 方案一句话</h3>
+  <p><b>固定 Bootloader（0x0，16 KB）+ 固定 App（0x4000，144 KB）+ 双页元数据 + Staging / Backup（非零等待区）</b>；App 负责通过 HTTPS 获取 <code>.dtufw</code> 包、校验并写入 Staging，Bootloader 负责启动决策、串口恢复和搬运；两条通道共用同一固件包格式与签名。串口升级只使用调试串口 USART1，不经过 RS-485 业务总线。</p>
+
+  <h3>1.2 推荐落地顺序</h3>
+  <ol>
+    <li><b>Phase 0</b>：Flash 可行性验证（非零等待区擦写、0x08000000 别名、搬运跳转、耗时实测），以及单 socket 下的 <b>HTTPS GET</b> 验证（TLS 主机名参数化、VERIFY_NONE、握手 RAM/耗时）。</li>
+    <li><b>Phase 1</b>：Bootloader + 串口 IAP（仅 USART1）+ <code>.dtufw</code> 包 + 分区 / 链接脚本 / 合并烧录，先打通「不会变砖」的底线。</li>
+    <li><b>Phase 2</b>：网络 OTA（WS 通知 + HTTPS GET）+ 固件 HTTPS 托管 + 签名校验 + 结果上报。</li>
+    <li><b>Phase 3</b>：自动回滚、启动尝试计数、Range 续传、看门狗与产线流程。不再包含 RS-485 通道和 WRP。</li>
+  </ol>
+  <p class="small">说明：本文中的耗时为工程估算，带「需实测」标记的项必须在 Phase 0 用实板确认。</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="status">
+  <h2>2. 现状与约束</h2>
+
+  <h3>2.1 芯片与存储</h3>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>项目</th><th>现状</th><th>对升级方案的影响</th></tr></thead>
+    <tbody>
+      <tr><td>CodeFlash</td><td>总容量 480 KB（0x00000000–0x00077FFF，别名 0x08000000–0x08077FFF）</td><td>空间充足，可放 Boot、App、Staging、Backup；Flash 驱动 <code>ValidAddrEnd = 0x08078000</code> 也印证了 480 KB。</td></tr>
+      <tr><td>Flash / RAM 配置</td><td>当前链接脚本采用 <b>160 KB 零等待 Flash + 32 KB SRAM</b>（另有 128K+64K、144K+48K 两种配置）</td><td>升级方案强依赖 160K/32K 这一配置；产线不得改选项字节，否则分区边界失效。</td></tr>
+      <tr><td>Flash 擦写粒度</td><td>快速模式：256 B 页擦、256 B 页写；也提供 <code>FLASH_ROM_ERASE/WRITE</code>（长度按 256 B 对齐）</td><td>升级按 256 B 分片最自然；每片擦+写一次，失败可重试。</td></tr>
+      <tr><td>当前 App 占用</td><td><code>text 128324 + data 308 = 128632 B</code>；bss 17304 B</td><td>144 KB App 区剩余约 <b>18.8 KB</b> 余量；需为 OTA 模块、签名校验和版本字符串预留。</td></tr>
+      <tr><td>Heap</td><td><code>_end=0x20003CCC</code>，<code>_heap_end=0x20007800</code>，合计 <b>15156 B</b>；TLS 握手实测峰值 12784 B，剩余 2372 B</td><td>WS 通知格式控制在 240 B 内，<b>WS payload 不用改</b>；新增 HTTPS 客户端缓冲约 0.8–1.5 KB BSS，会把 TLS 握手余量压到约 0.9–1.6 KB，必须实测。</td></tr>
+      <tr><td>TCP socket</td><td><code>WCHNET_NUM_TCP=1</code>，当前只有 WS 一条 TCP 连接；DHCP/DNS 另占 2 个 UDP</td><td><b>WS 与 HTTPS 不能并发</b>。网络升级必须先关闭 WS，再用同一个 socket 建立到固件服务器的 TLS 连接并发 HTTPS GET。把 NUM_TCP 提到 2 约增加 2 KB 静态 RAM，不推荐。</td></tr>
+      <tr><td>系统 Bootloader</td><td>芯片内置 28 KB System Boot Flash（ISP 用）</td><td>与用户 Flash 不冲突；ISP 可作为产线首烧/救砖通道。</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>2.2 现有软件栈</h3>
+  <ul>
+    <li><b>网络</b>：WCHNET + DHCP/DNS + TCP + mbedTLS 1.2 + 自研 WebSocket 客户端，已稳定连上 <code>ws.dtu.ap.openxiot.cn:443</code>。</li>
+    <li><b>WS 缓冲</b>：<code>WS_FIFO_SIZE=512</code>、<code>payload[256]</code>、<code>WS_TX_SIZE=256</code>。网络升级的 WS 通知只带 URL/大小/版本，控制在 240 B 以内，<b><code>payload[256]</code> 可保持不变</b>；只有 URL 上限放宽到 220 B 以上时才需要扩到 320 B。</li>
+    <li><b>HTTPS 客户端</b>：当前工程没有 HTTP/HTTPS 客户端。需要新增精简的 <b>HTTPS</b> GET 实现（URL 解析、TLS 建连、状态行、Content-Length、chunked、超时），复用 WCHNET socket、现有 DNS 服务器和 mbedTLS。</li>
+    <li><b>TLS</b>：mbedTLS 目前只服务 WS，<code>mbedtls_ssl_set_hostname(&amp;ssl, DTU_HOST)</code> 把主机名硬编码为 <code>DTU_HOST</code>；网络升级需要把 TLS 层抽成可复用的客户端，主机名参数化，供 WS 与 OTA 共用。OTA 连接保持 <code>VERIFY_NONE</code>，不做证书校验。</li>
+    <li><b>调试串口</b>：USART1，PA9(TX)，115200 8N1；当前 <code>Debug/debug.c</code> 只初始化了 TX，<b>PA10(RX) 未配置</b>。串口升级只在这个调试口上做，需要补 RX，并确认板子调试座引出 PA10。RS-485（USART2）不参与升级。</li>
+    <li><b>服务端</b>：<code>DeviceYedS710YmProcessor</code> 当前只处理心跳/csq/coordinates/查询帧，尚无 OTA 消息类型；固件需要放到支持 HTTPS 的静态服务器/对象存储。</li>
+    <li><b>无 RTC / 无纽扣电池</b>：TLS 证书有效期无法可靠校验，因此 OTA 的 TLS 连接采用 <code>VERIFY_NONE</code>；TLS 只保证传输加密，不承担固件真实性，完整性由包内 RSA 签名保证。</li>
+  </ul>
+
+  <div class="callout warn">
+    <strong>关键约束：执行位置</strong>
+    App 必须链接到 0x4000 并从零等待区执行；Staging / Backup 放在非零等待区，只读不执行。Bootloader 与 App 都不能在运行中擦除自己正在执行的页。
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="iap-isp">
+  <h2>3. IAP 还是 ISP</h2>
+
+  <h3>3.1 两种方式对比</h3>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th style="width:16%">维度</th><th>ISP（芯片出厂 Bootloader）</th><th>IAP（自研 Bootloader）</th></tr></thead>
+    <tbody>
+      <tr><td>代码位置</td><td>System Boot Flash（28 KB，固化）</td><td>用户 Flash 0x00000000 起，自己维护</td></tr>
+      <tr><td>进入方式</td><td>BOOT0=高、BOOT1=低，复位/上电；PC 端 WCHISPStudio / WCH-Link</td><td>每次复位先运行 Bootloader；由元数据、串口握手或 App 命令决定是否升级</td></tr>
+      <tr><td>物理通道</td><td>本封装为 USART1 PA9/PA10（需确认板级引出），或 USB；WCH-Link 走 SWD</td><td>串口升级固定走调试串口 USART1；网络升级走以太网 TLS</td></tr>
+      <tr><td>网络升级</td><td><b>不支持</b>（出厂 Bootloader 无以太网协议栈）</td><td><b>支持</b>（App 下载 + Bootloader 搬运）</td></tr>
+      <tr><td>现场可操作性</td><td>必须断电/跳线/接 PC，无法远程</td><td>可远程触发，可断点续传，可回滚</td></tr>
+      <tr><td>擦除范围</td><td>通常整片擦除，连自研 Bootloader 一起擦掉</td><td>只擦 Staging / App 区，Bootloader 不动</td></tr>
+      <tr><td>校验/版本</td><td>由 PC 工具负责</td><td>设备端 CRC32、SHA-256、RSA 签名、版本/机型检查</td></tr>
+      <tr><td>适用场景</td><td>产线首烧、研发救砖、Bootloader 损坏恢复</td><td>现场 OTA、串口维护升级、批量升级</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>3.2 为什么网络升级只能是 IAP</h3>
+  <p>ISP 的执行权在芯片内部固件，它只实现 USB/UART 下载协议，不跑 WCHNET、不跑 TLS，也没有我们的 WebSocket 会话。要让设备「联网自己升级」，必须由用户代码实现下载、校验、写 Flash 和重启切换——这就是 IAP。ISP 在这里只承担「设备彻底变砖后，用 WCH-Link 或 BOOT0+串口救回来」的角色。</p>
+
+  <h3>3.3 串口升级也不是 ISP</h3>
+  <p>「串口发送固件」有两种完全不同的做法：</p>
+  <ul>
+    <li><b>ISP over UART</b>：BOOT0 拉高、复位、WCHISPStudio 下载。需要现场有人操作跳线和 PC，不适合设备内部/远程触发。</li>
+    <li><b>IAP over UART</b>：设备正常运行或停在 Bootloader，主机按自定义协议发送镜像；设备自己擦写、校验、重启。本文采用这一种。</li>
+  </ul>
+
+  <div class="callout ok">
+    <strong>选型结论</strong>
+    产品固件实现 <b>IAP</b>；产线保留 <b>ISP</b> 作为首烧与救砖；两者不冲突，但生产烧录必须使用「Bootloader + App」合并镜像，避免 ISP 只烧 App 导致 0x0 处没有 Bootloader。
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="arch">
+  <h2>4. 总体架构</h2>
+
+  <div class="arch">
+    <div class="box">
+      <h4>云平台</h4>
+      <ul>
+        <li>设备接入服务（现有 wss）</li>
+        <li>WS 下发 OTA 通知：URL / 大小 / 版本</li>
+        <li>固件 HTTPS 服务器 / 对象存储（静态 .dtufw）</li>
+        <li>签名私钥（离线）、版本策略</li>
+      </ul>
+    </div>
+    <div class="box device">
+      <h4>设备（CH32V208）</h4>
+      <ul>
+        <li><b>App（0x4000）</b>：业务 + OTA 通知处理 + HTTPS GET + 包校验</li>
+        <li><b>Bootloader（0x0）</b>：启动决策、串口 IAP、搬运、回滚</li>
+        <li><b>Flash</b>：App / Meta / Staging / Backup</li>
+        <li><b>单 TCP socket</b>：WS 与 HTTPS 分时复用</li>
+      </ul>
+    </div>
+    <div class="box">
+      <h4>现场 / 产线工具</h4>
+      <ul>
+        <li>PC 串口升级工具（USART1 调试口）</li>
+        <li>WCHISPStudio + 合并 hex（ISP 救砖）</li>
+        <li>WCH-Link（SWD 恢复）</li>
+      </ul>
+    </div>
+  </div>
+
+  <p class="arrowline">云平台 ⇄ wss（TLS）⇄ App　　App ⇄ HTTPS GET（TLS）⇄ 固件服务器　　PC 工具 ⇄ USART1 ⇄ Bootloader</p>
+
+  <h3>4.1 职责划分</h3>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th style="width:18%">组件</th><th>负责</th><th>不负责</th></tr></thead>
+    <tbody>
+      <tr><td><b>App</b></td><td>业务上报；接收 WS OTA 通知；解析 URL；关闭 WS/TLS；建立 TLS 连接并发 HTTPS GET 下载 <code>.dtufw</code>；写 Staging；包头/CRC/SHA/签名校验；写 STAGED 元数据；复位；上报版本与结果。</td><td>不擦写自身 App 区；不处理 App 区损坏后的启动；不保持 WS 与 HTTPS 并发。</td></tr>
+      <tr><td><b>Bootloader</b></td><td>复位后第一段代码；读元数据；串口 IAP（仅 USART1）；校验 Staging；搬运到 App；搬运后校验；启动尝试计数；必要时恢复 Backup。</td><td>不含 WCHNET / mbedTLS / HTTPS；不做网络下载（v1）；不运行业务。</td></tr>
+      <tr><td><b>云平台</b></td><td>通过 <b>HTTPS</b> 托管 <code>.dtufw</code>；WS 下发 OTA 通知；版本策略/灰度；记录升级结果。</td><td>不直接操作设备 Flash；不通过 WS 传固件本体。</td></tr>
+      <tr><td><b>PC 工具</b></td><td>串口发送 <code>.dtufw</code>；生成签名包；串口日志；产线合并烧录。</td><td>不参与网络 OTA。</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>4.2 为什么 Bootloader 不做网络下载</h3>
+  <p>Bootloader 需要「小、稳、永不升级」。把 WCHNET + DHCP/DNS + TCP + mbedTLS 放进 Bootloader，Flash 至少增加 40–60 KB、RAM 增加 10 KB 以上，16 KB 的 Bootloader 区根本放不下，也会把最关键的恢复代码变得复杂。v1 的设计是：<b>网络升级只在 App 正常运行时进行</b>；App 损坏时靠串口恢复或 Backup 回滚。既然网络固件强制 HTTPS，Bootloader 做网络恢复还必须塞进 mbedTLS，更不现实。若产品要求「无人在现场且 App 已损坏也能联网恢复」，需要重新评估分区和 Bootloader 体积，而不是在本方案上打补丁。</p>
+
+  <h3>4.3 单 socket 的取舍</h3>
+  <p><code>WCHNET_NUM_TCP=1</code> 是当前为省 RAM 做的配置。WS 和 HTTPS 都要 TCP，所以网络升级只能分时：<b>先 WS 收通知，再关 WS，再建立到固件服务器的 TLS 连接并下载</b>。代价是下载期间无法向服务端实时上报进度，结果要等设备重启重连后再报；收益是省下约 2 KB 静态 RAM，保住 TLS 握手余量。</p>
+  <p>如果产品明确要求“下载进度实时可见”，有三个选择：① 把 <code>WCHNET_NUM_TCP</code> 提到 2（约 +2 KB RAM，需重新实测 TLS）；② 下载期间用 UDP 发进度（新增服务端协议，不推荐）；③ 接受“开始/结束”两个状态，不做百分比。本文推荐 ③。</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="layout">
+  <h2>5. Flash 分区</h2>
+
+  <h3>5.1 推荐分区（480 KB）</h3>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>区域</th><th>0x0 别名</th><th>0x08000000 别名</th><th>大小</th><th>用途 / 约束</th></tr></thead>
+    <tbody>
+      <tr><td><b>Bootloader</b></td><td class="mono">0x00000000–0x00003FFF</td><td class="mono">0x08000000–0x08003FFF</td><td>16 KB</td><td>永不升级；启动决策、串口 IAP、搬运。产线不开启 WRP，保护依赖分区边界与 App 侧写入范围检查。</td></tr>
+      <tr><td><b>App</b></td><td class="mono">0x00004000–0x00027FFF</td><td class="mono">0x08004000–0x08027FFF</td><td>144 KB</td><td>App 链接地址固定为 0x4000；必须位于 160 KB 零等待区内。</td></tr>
+      <tr><td><b>OTA Meta</b></td><td class="mono">0x00028000–0x00029FFF</td><td class="mono">0x08028000–0x08029FFF</td><td>8 KB</td><td>两个 4 KB 页轮换写 256 B 记录；掉电不丢旧记录。</td></tr>
+      <tr><td><b>Staging</b></td><td class="mono">0x0002A000–0x00051FFF</td><td class="mono">0x0802A000–0x08051FFF</td><td>160 KB</td><td>网络/串口下载的新镜像；非零等待区，只写不执行。</td></tr>
+      <tr><td><b>Backup</b></td><td class="mono">0x00052000–0x00077FFF</td><td class="mono">0x08052000–0x08077FFF</td><td>152 KB</td><td>预留：上一版 App / 自动回滚；v1 可先不使用。</td></tr>
+      <tr><td><b>合计</b></td><td class="mono">0x00000000–0x00077FFF</td><td class="mono">0x08000000–0x08077FFF</td><td>480 KB</td><td>与 <code>ValidAddrEnd=0x08078000</code> 一致。</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="small"><b>基线说明</b>：上表是 v0.3 基线（Boot 16 KB / App 144 KB），也是当前代码可直接采用的布局。若按 5.4 的结论冻结 <b>Boot 12 KB / App 148 KB @0x3000</b>，只改 Boot 和 App 两行的边界：Boot <code>0x0000–0x2FFF</code>（12 KB）、App <code>0x3000–0x27FFF</code>（148 KB）；Meta/Staging/Backup 的地址与大小完全不变，其余约束继续适用。</p>
+
+  <div class="callout warn">
+    <strong>0x08000000 别名</strong>
+    链接脚本用 0x00000000 段执行；但 <code>FLASH_ROM_ERASE/WRITE</code>、<code>FLASH_ErasePage_Fast</code>、<code>FLASH_ProgramPage_Fast</code> 的地址检查基于 <code>FLASH_BASE=0x08000000</code>。所有擦写/回读指针统一使用 <b>0x08000000 + offset</b>，不要传 0x0 基址，否则会被判为地址越界。
+  </div>
+
+  <h3>5.2 关键约束</h3>
+  <ul>
+    <li><b>零等待边界</b>：当前配置下 0x00028000 是零等待区终点。App 必须完整落在 0x4000–0x27FFF；Meta/Staging/Backup 不执行，放在边界之后。</li>
+    <li><b>App 链接地址</b>：<code>Ld/Link.ld</code> 改为 <code>ORIGIN = 0x00004000, LENGTH = 144K</code>；Bootloader 使用单独的 <code>Link_boot.ld</code>（ORIGIN 0x0，LENGTH 16K）。</li>
+    <li><b>链接地址固定</b>：不做 A/B 双地址执行。所有镜像都按 0x4000 链接，Bootloader 只负责把候选镜像搬到固定 App 区，避免「同一份固件要按两个地址各编译一次」。</li>
+    <li><b>对齐</b>：镜像大小按 256 B 向上取整，尾部补 <code>0xFF</code>；CRC32/SHA-256 都按补 0xFF 后的完整镜像计算。</li>
+    <li><b>App 上限</b>：144 KB；当前 128632 B，余量 18824 B。若后续功能增长超过余量，可把 Bootloader 缩到 12 KB（App 148 KB，Meta/Staging/Backup 地址不变）；容量账与增长路径见 5.4。</li>
+    <li><b>Meta/Staging 不参与执行</b>：非零等待区读取会慢一些，但只用于搬运和校验，不影响业务实时性。</li>
+  </ul>
+
+  <h3>5.3 链接脚本示意</h3>
+<pre><code>/* Ld/Link_boot.ld（Bootloader，16 KB 基线） */
+MEMORY {
+  FLASH (rx) : ORIGIN = 0x00000000, LENGTH = 16K
+  RAM  (xrw): ORIGIN = 0x20000000, LENGTH = 32K
+}
+
+/* Ld/Link.ld（App，16 KB Boot 基线） */
+MEMORY {
+  FLASH (rx) : ORIGIN = 0x00004000, LENGTH = 144K
+  RAM  (xrw): ORIGIN = 0x20000000, LENGTH = 32K
+}
+
+/* 若冻结 Boot 12 KB / App 148 KB（5.4 推荐），只改两处：
+   Link_boot.ld : LENGTH = 12K
+   Link.ld      : ORIGIN = 0x00003000, LENGTH = 148K
+   Meta/Staging/Backup 地址不变。 */</code></pre>
+  <p class="small">RAM 仍为 32 KB；Bootloader 不需要 WCHNET/mbedTLS，但其静态缓冲和 2 KB 栈要从同一块 SRAM 里分配。Bootloader 运行结束后跳转 App，App 启动代码会重设 sp/gp/bss。</p>
+
+  <h3 id="capacity">5.4 容量规划与增长路径</h3>
+  <p>5.1 的分区表合计正好 480 KB，没有空洞。但真正的瓶颈不是总容量，而是 <b>160 KB 零等待区</b>：App 必须整个落在零等待区内（基线 <code>0x4000–0x27FFF</code>；冻结 148 KB 时为 <code>0x3000–0x27FFF</code>），终点 <code>0x28000</code> 又被 Meta 固定，因此：</p>
+<pre class="flow">App 终点 = 0x28000（固定）
+App 起点 = Bootloader 大小
+App 槽   = 160 KB − Bootloader</pre>
+
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Bootloader</th><th>App 槽</th><th>App 起点</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>16 KB</td><td>144 KB</td><td class="mono">0x00004000</td><td>当前 5.1 方案</td></tr>
+      <tr><td>12 KB</td><td>148 KB</td><td class="mono">0x00003000</td><td><b>推荐</b>：Meta/Staging/Backup 地址完全不变</td></tr>
+      <tr><td>8 KB</td><td>152 KB</td><td class="mono">0x00002000</td><td>Bootloader 很紧，通常要削减功能</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="small">在保持全速（App 全在零等待区）的前提下，<b>扩大 App 槽的唯一办法是缩小 Bootloader</b>。删 Backup、缩 Staging 都不能扩大 App 槽，因为 App 的终点被 Meta 地址锁死。</p>
+
+  <h4>5.4.1 140 KB 时的实际占用</h4>
+  <p>按 140 KB 镜像、各区域取最小尺寸（Staging 必须容纳 512 B 包头 + 镜像，向上取整到 4 KB）：</p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>区域</th><th>最小需要</th><th>当前表</th><th>富余</th></tr></thead>
+    <tbody>
+      <tr><td>Bootloader</td><td>16 KB</td><td>16 KB</td><td>0</td></tr>
+      <tr><td>App</td><td>140 KB</td><td>144 KB</td><td>4 KB</td></tr>
+      <tr><td>OTA Meta</td><td>8 KB</td><td>8 KB</td><td>0</td></tr>
+      <tr><td>Staging</td><td>144 KB</td><td>160 KB</td><td>16 KB</td></tr>
+      <tr><td>Backup</td><td>140 KB</td><td>152 KB</td><td>12 KB</td></tr>
+      <tr><td><b>合计</b></td><td><b>448 KB</b></td><td><b>480 KB</b></td><td><b>32 KB</b></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="small">所以“140 KB 就把 480 KB 用完了”对当前表成立，但 32 KB 富余是分散在三个区里的，<b>拼不起来给 App 用</b>。App 槽想变大，只能缩 Bootloader。</p>
+
+  <h4>5.4.2 三份镜像的硬上限</h4>
+  <p>运行、下载、备份三份都要放时，设 App = A：</p>
+<pre class="flow">Boot + Meta + A + (A + 0.5 KB) + Backup ≤ 480 KB</pre>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Bootloader</th><th>三份镜像的 App 上限</th><th>其中“全速”上限</th></tr></thead>
+    <tbody>
+      <tr><td>16 KB</td><td>约 151 KB</td><td>144 KB</td></tr>
+      <tr><td>12 KB</td><td>约 153 KB</td><td>148 KB</td></tr>
+      <tr><td>8 KB</td><td>约 154 KB</td><td>152 KB</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="small">上限按 <code>3A ≤ 480 − Boot − Meta − 0.5</code> 估算，未计 4 KB 对齐；实际取整后通常少 1–4 KB。</p>
+  <p>超过“全速”上限后，App 会开始进入非零等待区；超过三份上限后，必须放弃 Backup、缩 Meta 或改用外部 Flash。结论是：<b>三份镜像的硬上限约 153 KB；若要求全速运行，则为 144–152 KB（取决于 Bootloader 大小）</b>。不是“再大一点就立刻崩”，但到点必须做取舍。</p>
+
+  <h4>5.4.3 增长路径</h4>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>App 目标</th><th>Bootloader</th><th>App 起点</th><th>其它分区</th><th>代价 / 说明</th></tr></thead>
+    <tbody>
+      <tr><td>≤ 144 KB</td><td>16 KB</td><td class="mono">0x4000</td><td>不变</td><td>当前方案；槽满即 144 KB</td></tr>
+      <tr><td>≤ 148 KB</td><td>12 KB</td><td class="mono">0x3000</td><td>不变</td><td>只缩 Boot；<b>推荐</b></td></tr>
+      <tr><td>≤ 152 KB</td><td>8 KB</td><td class="mono">0x2000</td><td>不变</td><td>Boot 8 KB 很紧，可能要砍 SHA-256</td></tr>
+      <tr><td>153–154 KB</td><td>8 KB</td><td class="mono">0x2000</td><td>Meta 后移到 App 之后，可能缩到 4 KB</td><td>App 部分进慢速区；Backup 恰好够</td></tr>
+      <tr><td>≥ 155 KB</td><td>8 KB</td><td class="mono">0x2000</td><td>放弃 Backup</td><td>失去自动回滚；App 可到约 228 KB，但大部分在慢速区</td></tr>
+      <tr><td>任意</td><td>—</td><td>—</td><td>外挂 SPI Flash 放 Staging/Backup</td><td>需改板；内部只留 Boot + App</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="small">表中“其它分区不变”指 Meta 仍在 <code>0x28000</code>、Staging 仍在 <code>0x2A000</code>、Backup 仍在 <code>0x52000</code>。Boot 12 KB / App 148 KB 时总账为 12 + 148 + 8 + 160 + 152 = 480 KB；Boot 8 KB / App 152 KB 时总账为 8 + 152 + 8 + 160 + 152 = 480 KB。两者都只动 Boot/App 边界。</p>
+
+  <h4>5.4.4 为什么必须在冻结前决定</h4>
+  <ul>
+    <li>v1 的 Bootloader <b>永不升级</b>；Boot 大小、App 起点、Meta 地址都是 Bootloader 的编译期常量。</li>
+    <li>出货后想把 App 槽从 144 KB 改成 148 KB，必须换 Bootloader；换 Bootloader 只能靠 SWD / ISP / 串口现场重烧，<b>不能通过网络 OTA 下发</b>。</li>
+    <li>因此建议 Phase 0 通过后直接冻结 <b>Boot 12 KB + App 148 KB @0x3000</b>：Meta 仍在 0x28000，Staging / Backup 地址不变，Bootloader 只改“搬运目标地址 + 镜像长度”两个常量，App 只改 <code>Link.ld</code> 的 ORIGIN / LENGTH。</li>
+    <li>如果 Phase 1 实测 Bootloader 能压到 8 KB（有 SHA-256 时不太现实），再考虑 0x2000 / 152 KB；<b>不建议为 4 KB 把恢复代码压到 8 KB</b>。</li>
+    <li>构建加 size gate：App &gt; 140 KB 警告，&gt; 148 KB 直接编译失败（若冻结 148 KB），避免发版前才发现。</li>
+  </ul>
+
+  <div class="callout warn">
+    <strong>不要把 480 KB 当成可用 App 空间</strong>
+    可用 App = 160 KB − Bootloader；三份镜像又把它压到约 153 KB。Staging 和 Backup 的超配（160 / 152 KB）只是余量，不能给 App 槽用。若产品路线图明确 App 会超过 152 KB，现在就要评估外挂 SPI Flash 或放弃 Backup，不能等出货后再改分区。
+  </div>
+
+  <h3 id="ab">5.5 备选方案：A/B 双分区（评估）</h3>
+  <div class="callout warn">
+    <strong>结论先说：当前项目不推荐 A/B</strong>
+    A/B 的优点是两份镜像、切换不拷贝、回滚免费；但 CH32V208 只有 160 KB 零等待区，两个可执行槽必有一个落在非零等待区，<b>每隔一版运行变慢</b>。下面给出完整方案与量化对比，供评审；若 Phase 0 实测慢速槽可接受且发布管线能维护双构建，再重新评估。
+  </div>
+
+  <p>A/B 双分区有两种常见形态：</p>
+  <ul>
+    <li><b>A/B-1 执行切换型（真 A/B）</b>：两个槽都可直接执行；Meta 记录活动槽；升级只写非活动槽，复位后直接跳到新槽；旧槽原样保留，回滚只需改 Meta。需要两个链接地址、两份镜像。</li>
+    <li><b>A/B-2 固定执行 + 交换型</b>：两份镜像都链接到同一个 App 地址，非活动槽只作存储，Bootloader 启动时把候选镜像“换”到固定槽。要保留旧镜像供回滚，必须有第三块区域或 MCUboot 式的 scratch 交换算法；本质上又回到 5.1 的三区拷贝方案，或引入很高的复杂度。本节以 A/B-1 为主，A/B-2 的取舍见 5.5.11。</li>
+  </ul>
+
+  <h4>5.5.1 分区布局（A/B-1，480 KB）</h4>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>区域</th><th>0x0 别名</th><th>大小</th><th>可执行</th><th>用途 / 约束</th></tr></thead>
+    <tbody>
+      <tr><td><b>Bootloader</b></td><td class="mono">0x00000000–0x00003FFF</td><td>16 KB</td><td>是</td><td>启动决策、槽校验、串口 IAP、回滚；永不升级</td></tr>
+      <tr><td><b>Slot A</b></td><td class="mono">0x00004000–0x00027FFF</td><td>144 KB</td><td>是，零等待</td><td>活动或非活动槽；A 构建链接于此</td></tr>
+      <tr><td><b>Slot B</b></td><td class="mono">0x00028000–0x0004BFFF</td><td>144 KB</td><td>是，非零等待</td><td>活动或非活动槽；B 构建链接于此</td></tr>
+      <tr><td><b>OTA Meta</b></td><td class="mono">0x0004C000–0x0004DFFF</td><td>8 KB</td><td>否</td><td>双页轮换，记录 active/pending 与两个槽的校验信息</td></tr>
+      <tr><td><b>预留</b></td><td class="mono">0x0004E000–0x00077FFF</td><td>168 KB</td><td>否</td><td>产线镜像、日志、未来扩展；不参与启动</td></tr>
+      <tr><td><b>合计</b></td><td class="mono">0x00000000–0x00077FFF</td><td>480 KB</td><td></td><td>与 <code>ValidAddrEnd</code> 一致</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="small">与 5.1 相比，Meta 从 <code>0x28000</code> 移到 <code>0x4C000</code>，因为它不能夹在两个槽中间。若需要 148 KB 槽，Boot 缩到 12 KB：Slot A <code>0x3000–0x27FFF</code>、Slot B <code>0x28000–0x4CFFF</code>、Meta <code>0x4D000–0x4EFFF</code>，预留缩为 <code>0x4F000–0x77FFF</code>（164 KB）。</p>
+
+  <h4>5.5.2 双链接地址与双构建</h4>
+<pre class="flow">Slot A（Link.ld）  : FLASH ORIGIN = 0x00004000, LENGTH = 144K
+Slot B（Link_b.ld）: FLASH ORIGIN = 0x00028000, LENGTH = 144K
+
+同一份源码 → app_A.elf / app_B.elf → 两个 .dtufw 包（各自签名）
+App 运行时用 &amp;_vector_base 判断自己在哪个槽</pre>
+  <ul>
+    <li><b>不做位置无关代码 / 重定位</b>：每个镜像只在自己槽的地址运行；数据段绝对指针、<code>mtvec</code> 都由链接地址决定。RISC-V 的 <code>la</code>/<code>auipc</code> 只能解决取指相对寻址，不能解决 <code>.data</code> 里的绝对函数指针。</li>
+    <li>启动代码已经用 <code>la t0, _vector_base</code> 设置 <code>mtvec</code>（<code>Startup/startup_ch32v20x_D8W.S:266</code>），所以两个构建不需要改启动代码，只需两套链接脚本。</li>
+    <li>App 通过 <code>uintptr_t base = (uintptr_t)&amp;_vector_base;</code> 判断活动槽，并只允许写<b>另一个槽 + Meta</b>，绝不写活动槽或 Bootloader。</li>
+    <li>若采用 A/B，<code>.dtufw</code> 包头 <code>flags</code> 的保留位需要定义 <code>target_slot</code>（1=Slot A，2=Slot B），设备校验“目标必须是非活动槽”。当前拷贝方案不改这个字段。</li>
+    <li>服务端每个版本托管两份包；设备上报活动槽和版本，服务端下发匹配的另一份。包内镜像与槽地址绑定，<b>不能把 A 包写进 B 槽</b>。</li>
+  </ul>
+
+  <h4>5.5.3 元数据（两个槽）</h4>
+  <p>Meta 记录从 5.1 的单镜像扩展为两个槽，仍是一页 256 B 记录、双页轮换：</p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>字段</th><th>大小</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">magic / seq</td><td>8 B</td><td>同 5.1；取 seq 最大的有效记录</td></tr>
+      <tr><td class="mono">active_slot</td><td>1 B</td><td>0=A，1=B；当前启动槽</td></tr>
+      <tr><td class="mono">pending_slot</td><td>1 B</td><td>0xFF=无；新镜像已校验、等待切换</td></tr>
+      <tr><td class="mono">slot[2].state</td><td>1 B × 2</td><td>EMPTY / VERIFIED / PENDING / CONFIRMED / BAD</td></tr>
+      <tr><td class="mono">slot[2].version</td><td>4 B × 2</td><td>该槽镜像版本</td></tr>
+      <tr><td class="mono">slot[2].image_size</td><td>4 B × 2</td><td>镜像长度（256 B 对齐）</td></tr>
+      <tr><td class="mono">slot[2].image_crc32</td><td>4 B × 2</td><td>镜像 CRC32</td></tr>
+      <tr><td class="mono">slot[2].image_sha256</td><td>32 B × 2</td><td>镜像 SHA-256（可选，用于启动复验）</td></tr>
+      <tr><td class="mono">slot[2].attempts</td><td>1 B × 2</td><td>未确认启动次数</td></tr>
+      <tr><td class="mono">slot[2].confirmed</td><td>1 B × 2</td><td>新 App 正常运行 30 s 后置 1</td></tr>
+      <tr><td class="mono">crc</td><td>4 B</td><td>记录 CRC；掉电只丢最新一条</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h4>5.5.4 启动流程</h4>
+<pre class="flow">Bootloader:
+  meta = 读取双页中 seq 最大且 CRC 有效的记录
+  if meta.pending_slot 有效且该槽镜像校验通过:
+      meta.active_slot = meta.pending_slot; meta.pending_slot = 0xFF
+  校验 active 槽（size + CRC32，可选 SHA-256）
+  if 校验失败:
+      若另一槽有效 → active = 另一槽（回滚）；否则 RECOVERY
+  attempts++
+  if attempts &gt; 5:
+      标记当前槽 BAD → 若另一槽有效则回滚；否则 RECOVERY
+  跳转到 active 槽基址（0x4000 或 0x28000）
+
+App（新版本）:
+  正常运行 30 s → 写 Meta：confirmed=1, attempts=0
+  上报 ota=done</pre>
+  <p class="small">切换不拷贝，只改 Meta 并跳转；启动校验约 0.1–0.3 s（CRC32；加 SHA-256 约 0.2–0.5 s，需实测）。Meta 每次写都走双页轮换，掉电不会同时丢两条记录。</p>
+
+  <h4>5.5.5 网络升级流程</h4>
+<pre class="flow">活动槽 A（0x4000）运行中:
+  WS OTA 通知(url,size,ver) → 校验 → 回 ota=starting → 关闭 WS/TLS
+  HTTPS GET → 读 512 B 包头 → 校验 target_slot=B、hw_id、版本
+  镜像流式写入 Slot B（0x28000，跳过 512 B 包头），同时算 CRC32/SHA-256
+  RSA 验签通过 → Meta：slotB=VERIFIED, pending=B → 复位
+
+Bootloader:
+  校验 Slot B → active=B → 跳 0x28000
+
+新 App（B）:
+  运行 30 s → Meta：slotB=CONFIRMED, attempts=0 → 上报 ota=done
+
+下一轮:
+  活动 B → 下载到 Slot A → 切回 A，如此交替</pre>
+  <ul>
+    <li>下载期间活动槽 A 完全不被写，掉电/中断最多损坏非活动槽；旧版本始终可启动。</li>
+    <li>升级包只含镜像（写槽时跳过 512 B 包头）；签名在下载阶段验证，Bootloader 启动时信任 Meta 的 verified 标志并做 CRC 复验，不在 Bootloader 里做 RSA（与 5.1 的网络路径一致）。</li>
+    <li>串口升级同理：App 置 <code>BOOT_UART</code> + 目标槽后复位，Bootloader 用串口把镜像写入非活动槽并校验，再设为 pending。</li>
+  </ul>
+
+  <h4>5.5.6 回滚与异常</h4>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>场景</th><th>行为</th></tr></thead>
+    <tbody>
+      <tr><td>新槽下载中断 / 掉电</td><td>非活动槽部分写入，Meta 未更新；活动槽正常启动</td></tr>
+      <tr><td>新槽校验失败</td><td>标记该槽 BAD，不切换；活动槽继续运行</td></tr>
+      <tr><td>新 App 启动崩溃</td><td>attempts 达 5 次 → 标记 BAD，切回旧槽；无需拷贝</td></tr>
+      <tr><td>Meta 写掉电</td><td>双页轮换，旧记录仍有效</td></tr>
+      <tr><td>两个槽都无效</td><td>RECOVERY：串口升级写入无效/空槽并设为 active；默认先写 Slot A</td></tr>
+      <tr><td>回滚后的版本上报</td><td>服务端必须接受旧版本，并把失败版本/哈希拉黑，避免立即重推</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h4>5.5.7 性能影响（决定性因素）</h4>
+  <ul>
+    <li>Slot B 从 <code>0x28000</code> 开始，正好是零等待区之后的第一个地址；<b>整个 Slot B 都在非零等待区</b>，取指会插入等待周期。</li>
+    <li>A/B 交替升级意味着<b>每隔一个版本就从慢速槽运行</b>，不是“只有升级那一次慢”。这是 A/B-1 在本芯片上的根本代价。</li>
+    <li>不能只把冷代码放慢速区：运行在 B 时整个 App 都在 B；除非把热点函数复制到 32 KB SRAM 执行，但这会吃掉 TLS/业务 RAM，且覆盖不全。</li>
+    <li><b>Phase 0 必须先测</b>：把当前 App 链接到 <code>0x28000</code>，连续运行 30 min，测 TLS 握手耗时、WS 往返/心跳抖动、以太网丢包、RSA 验签耗时、主循环延迟。若下降超过 20–30% 或出现丢包，A/B-1 直接否决。</li>
+  </ul>
+
+  <h4>5.5.8 容量对比</h4>
+  <ul>
+    <li>A/B 只需两份镜像：Boot 16 + Slot A 144 + Slot B 144 + Meta 8 = <b>312 KB</b>，剩余 <b>168 KB</b>，比 5.1 的三份镜像（480 KB 占满）更省 Flash。</li>
+    <li>App ≤ 144 KB 时两槽各 144 KB；Boot 缩到 12 KB 时两槽可各 148 KB（Slot A <code>0x3000</code>、Slot B <code>0x28000</code>，Meta 后移）。</li>
+    <li>但 A/B <b>不解决零等待区限制</b>：Slot A 可以全速，Slot B 永远在慢速区。它用“执行性能”换“回滚与容量”。</li>
+  </ul>
+
+  <h4>5.5.9 发布与服务端影响</h4>
+  <ul>
+    <li>每个版本产出两份镜像、两个签名包（A 链接 / B 链接）；CI 必须同时构建、校验两份。</li>
+    <li>服务端要记录每台设备的活动槽和版本，只下发“非活动槽”对应的包；包内 <code>target_slot</code> 不匹配则拒绝。</li>
+    <li>回滚后设备上报旧版本，服务端要接受并拉黑失败版本；否则会立刻重推同一个坏版本。</li>
+    <li>产线合并 hex 为 Boot + Slot A；Slot B 保持擦除，Meta 为 EMPTY；首次启动进入串口窗口或由产线写入 active=A。</li>
+  </ul>
+
+  <h4>5.5.10 与拷贝方案的对比</h4>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>维度</th><th>拷贝方案（5.1，当前）</th><th>A/B-1（执行切换）</th></tr></thead>
+    <tbody>
+      <tr><td>镜像份数</td><td>3 份（App + Staging + Backup）</td><td>2 份（Slot A + Slot B）</td></tr>
+      <tr><td>升级切换</td><td>Bootloader 拷贝 144 KB，约 1–2 s</td><td>改 Meta + 跳转，校验约 0.1–0.5 s</td></tr>
+      <tr><td>回滚</td><td>需要 Backup，Phase 3 实现，回滚要再拷贝</td><td><b>免费</b>，跳回旧槽即可</td></tr>
+      <tr><td>掉电安全</td><td>Staging 保留，可重新搬运</td><td>活动槽不被写，天然安全</td></tr>
+      <tr><td>链接地址</td><td>1 个（0x4000）</td><td>2 个（0x4000 / 0x28000）</td></tr>
+      <tr><td>构建 / 发布</td><td>1 份镜像</td><td>2 份镜像，2 个签名包</td></tr>
+      <tr><td>运行性能</td><td>恒定，全在零等待区</td><td>交替，一个槽在慢速区</td></tr>
+      <tr><td>Flash 占用</td><td>480 KB 占满</td><td>312 KB，剩 168 KB</td></tr>
+      <tr><td>实现复杂度</td><td>中：搬运 + Meta + 分区</td><td>高：双链接、双构建、槽管理、服务端双包</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h4>5.5.11 结论</h4>
+  <div class="callout warn">
+    <strong>结论</strong>
+    <b>A/B-1 架构干净、回滚免费、Flash 更省，但在 CH32V208 上被 160 KB 零等待区否决</b>：两个可执行槽必有一个在慢速区，每隔一版运行变慢，且需要双构建/双包发布。A/B-2（固定执行 + 交换）要么退化成 5.1 的三区拷贝，要么需要 MCUboot 级 scratch 交换算法，没有收益。<br>
+    建议：<b>保留 5.1 的拷贝方案</b>；按 5.4 冻结 Boot 12 KB / App 148 KB，Phase 3 用 Backup 实现回滚；若 App 超过 152 KB，优先评估外挂 SPI Flash，而不是改 A/B。若 Phase 0 实测慢速槽性能可接受且发布管线能维护双构建，再重新评估 A/B-1。
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="boot">
+  <h2>6. 启动流程与元数据</h2>
+
+  <h3>6.1 元数据记录</h3>
+  <p>使用两个独立的 4 KB 页（0x28000、0x29000），每页开头写一条 256 B 记录。写入时先擦「非当前」页，再写新记录并递增 seq；两条记录中取 magic/CRC 有效且 seq 最大者。这样任何一次掉电最多丢一条新记录，旧记录仍在另一页。</p>
+
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>偏移</th><th>大小</th><th>字段</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">0x00</td><td>4</td><td>magic</td><td><code>4F 54 41 4D</code>（"OTAM"）</td></tr>
+      <tr><td class="mono">0x04</td><td>4</td><td>seq</td><td>单调递增，选择最大有效记录</td></tr>
+      <tr><td class="mono">0x08</td><td>1</td><td>state</td><td>0=EMPTY，1=APP_VALID，2=STAGED，3=COPYING，4=BOOT_UART，5=RECOVERY</td></tr>
+      <tr><td class="mono">0x09</td><td>1</td><td>attempts</td><td>未确认启动次数（可选功能）</td></tr>
+      <tr><td class="mono">0x0A</td><td>2</td><td>flags</td><td>bit0=允许降级，bit1=已验签，bit2=升级完成待上报，其余保留</td></tr>
+      <tr><td class="mono">0x0C</td><td>4</td><td>image_size</td><td>补 0xFF 后的镜像长度（256 B 对齐）</td></tr>
+      <tr><td class="mono">0x10</td><td>4</td><td>image_crc32</td><td>完整镜像 CRC32</td></tr>
+      <tr><td class="mono">0x14</td><td>4</td><td>image_version</td><td>major&lt;&lt;16 | minor&lt;&lt;8 | patch</td></tr>
+      <tr><td class="mono">0x18</td><td>4</td><td>hw_id</td><td>机型/硬件版本哈希（防止刷错机型）</td></tr>
+      <tr><td class="mono">0x1C</td><td>4</td><td>source</td><td>0=none，1=network，2=serial</td></tr>
+      <tr><td class="mono">0x20</td><td>32</td><td>image_sha256</td><td>完整镜像 SHA-256</td></tr>
+      <tr><td class="mono">0x40</td><td>4</td><td>record_crc32</td><td>覆盖 0x00–0x3F</td></tr>
+      <tr><td class="mono">0x44–0xFF</td><td>188</td><td>0xFF</td><td>填充</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>6.2 Bootloader 启动决策</h3>
+<pre class="flow">复位 / 上电
+  │
+  ├─ 读 Meta 两页，取 seq 最大且 CRC 有效的记录
+  │
+  ├─ state == STAGED ?
+  │    ├─ Staging CRC 校验通过（bit1 表示 App 已验签）
+  │    │    ├─ (可选) 当前 App → Backup 备份并校验
+  │    │    ├─ 标记 COPYING（写 Meta）
+  │    │    ├─ Staging+512 → App 逐 256B 搬运
+  │    │    ├─ App 区回读 CRC32 校验
+  │    │    ├─ 成功：state=APP_VALID，attempts=0，flags.bit2=1（待上报），跳 App
+  │    │    └─ 失败：RECOVERY（或从 Backup 恢复）
+  │    └─ 校验失败：清除 STAGED，按 APP_VALID 处理
+  │
+  ├─ state == COPYING ?
+  │    ├─ Staging 仍有效：重新搬运
+  │    └─ Staging 无效：RECOVERY / 从 Backup 恢复
+  │
+  ├─ state == BOOT_UART / RECOVERY ?
+  │    └─ 进入串口升级（BOOT_UART 等待 30s；RECOVERY 无限等待）
+  │
+  └─ state == APP_VALID ?
+       ├─ attempts >= 5 → RECOVERY
+       ├─ 监听 500ms 串口 HELLO
+       │    ├─ 收到 → 进入串口升级
+       │    └─ 未收到 → attempts++（若启用），跳 App
+       └─ 无有效 Meta → 串口升级（无限等待）</pre>
+
+  <h3>6.3 状态语义</h3>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>state</th><th>含义</th><th>谁写入</th><th>下次启动动作</th></tr></thead>
+    <tbody>
+      <tr><td><code>EMPTY</code></td><td>无有效记录（首次上电 / 两页都损坏）</td><td>Bootloader / 产线</td><td>进入串口升级，等待 HELLO</td></tr>
+      <tr><td><code>APP_VALID</code></td><td>App 区内容完整可用</td><td>Bootloader（搬运成功后）</td><td>短窗口监听串口，然后跳 App</td></tr>
+      <tr><td><code>STAGED</code></td><td>Staging 已下载并校验通过，等待搬运</td><td>App（网络 OTA）或 Bootloader（串口）</td><td>校验 Staging → 搬运 → 再校验</td></tr>
+      <tr><td><code>COPYING</code></td><td>正在搬运，掉电后可重试</td><td>Bootloader</td><td>重新搬运（Staging 未动）</td></tr>
+      <tr><td><code>BOOT_UART</code></td><td>App 请求下次进入串口升级</td><td>App / 服务端命令</td><td>等待 HELLO 30 s，超时按 APP_VALID 处理</td></tr>
+      <tr><td><code>RECOVERY</code></td><td>App 不可用或搬运失败</td><td>Bootloader</td><td>无限等待串口升级；可选从 Backup 恢复</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>6.4 跳转到 App</h3>
+<pre><code>typedef void (*app_entry_t)(void);
+
+static void jump_to_app(void)
+{
+    app_entry_t entry = (app_entry_t)APP_BASE;   /* 0x4000 处是 _start 的 j handle_reset */
+
+    __disable_irq();                              /* 关全局中断 */
+    /* 停掉 Bootloader 的 UART/TIM；清 NVIC pending */
+    for (int i = 0; i &lt; 8; i++) NVIC-&gt;ICPR[i] = 0xFFFFFFFFu;
+
+    entry();                                      /* App 的 handle_reset 会重设 sp/gp/mtvec/bss */
+}</code></pre>
+  <p class="small">注意：不要读 <code>*(uint32_t*)APP_BASE</code> 当作函数指针——RISC-V 的镜像开头是一条指令（<code>j handle_reset</code>），不是地址表。直接跳到 APP_BASE 执行即可。</p>
+
+  <h3>6.5 启动尝试计数与回滚</h3>
+  <ul>
+    <li><b>计数</b>：Bootloader 在跳 App 前 <code>attempts++</code>；App 连续正常运行 30 s 后写回 <code>attempts=0</code>。若达到 5 次仍未确认，进入 RECOVERY / 回滚。</li>
+    <li><b>风险</b>：用户快速反复断电 5 次（每次不足 30 s）会误触发 RECOVERY。可通过「确认时间缩短到 10 s」「次数提高到 8」或「默认关闭、仅产线开启」来权衡。</li>
+    <li><b>Flash 寿命</b>：每次启动最多 2 次元数据写（attempts++ / 清零），两页轮换，约 5 万–10 万次启动后才接近 10 万次擦写规格；对 DTU 足够。</li>
+    <li><b>回滚</b>：若要求「新固件启动失败自动回旧版」，需启用 Backup 区：搬运前把当前 App 备份到 Backup；新 App 未确认时由 Bootloader 把 Backup 搬回 App。v1 可只预留空间，Phase 3 实现。</li>
+  </ul>
+
+  <h3>6.6 生产镜像</h3>
+  <p>产线不能只烧 App：0x0 没有 Bootloader 时设备无法启动。构建输出一个合并 hex（Boot 0x0 + App 0x4000，中间 0xFF），用 WCHISPStudio 一次烧录；Meta 区保持擦除态（EMPTY），首次启动会进入串口升级等待或由产线工具写入 APP_VALID。产线不开启 WRP，后续返修仍可直接整片擦除重烧；Bootloader 的保护靠 App 只允许擦写 Staging/Meta、绝不触碰 0x0–0x3FFF。</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="image">
+  <h2>7. 固件包与校验</h2>
+
+  <h3>7.1 打包流水线</h3>
+  <div class="callout ok">
+    <strong>串口和网络传的是同一个文件</strong>
+    升级包统一为 <code>.dtufw</code>：512 B 包头 + 补 0xFF 到 256 B 对齐的镜像。串口按帧传这个文件的字节流；网络用 HTTPS GET 下载这个文件。设备端只需要一套包头解析和校验逻辑。
+  </div>
+<pre class="flow">MounRiver 编译 App（链接 0x4000）
+        │
+        ├─ objcopy -O binary app.elf app.bin
+        ├─ 按 256 B 补 0xFF → app_pad.bin
+        ├─ 计算 image_crc32 / image_sha256 / file_size
+        ├─ 填 512 B 包头（magic、版本、hw_id、尺寸、CRC、SHA-256）
+        ├─ 对「包头前 0x40 B + 镜像」做 SHA-256，RSA-2048 私钥签名
+        ├─ 签名写入包头 0x40..0x13F
+        └─ 输出 app_x.y.z.dtufw（512 B 头 + 镜像）
+
+发布：.dtufw 上传到 HTTPS 服务器 / 对象存储；PC 串口工具直接发送同一文件</pre>
+
+  <h3>7.2 包头格式（512 B）</h3>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>偏移</th><th>大小</th><th>字段</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">0x000</td><td>8</td><td>magic</td><td><code>44 54 55 46 57 01 00 00</code>（"DTUFW" + 版本 1 + 保留）</td></tr>
+      <tr><td class="mono">0x008</td><td>2</td><td>header_size</td><td>512</td></tr>
+      <tr><td class="mono">0x00A</td><td>2</td><td>flags</td><td>bit0=允许降级，其余保留</td></tr>
+      <tr><td class="mono">0x00C</td><td>4</td><td>file_size</td><td>整个文件长度 = 512 + image_size</td></tr>
+      <tr><td class="mono">0x010</td><td>4</td><td>image_size</td><td>镜像长度，256 B 对齐</td></tr>
+      <tr><td class="mono">0x014</td><td>4</td><td>image_crc32</td><td>CRC-32/IEEE（poly 0xEDB88320，init/xorout 0xFFFFFFFF）</td></tr>
+      <tr><td class="mono">0x018</td><td>4</td><td>image_version</td><td>major&lt;&lt;16 | minor&lt;&lt;8 | patch</td></tr>
+      <tr><td class="mono">0x01C</td><td>4</td><td>hw_id</td><td>机型/硬件版本哈希</td></tr>
+      <tr><td class="mono">0x020</td><td>32</td><td>image_sha256</td><td>SHA-256(image)</td></tr>
+      <tr><td class="mono">0x040</td><td>256</td><td>signature</td><td>RSA-2048 PKCS#1 v1.5，签名对象 = SHA-256(header[0x000..0x040) || image)</td></tr>
+      <tr><td class="mono">0x140</td><td>192</td><td>reserved</td><td>0xFF</td></tr>
+      <tr><td class="mono">0x200</td><td>image_size</td><td>image</td><td>补 0xFF 到 256 B 对齐的 App 镜像</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>签名对象刻意包含包头前 0x40 B（不含签名自身），这样版本、hw_id、尺寸、CRC、SHA-256 都不能被篡改；攻击者改任何一个字段都会导致验签失败。包头的 reserved 和 signature 字段不参与哈希。</p>
+
+  <h3>7.3 设备端校验顺序</h3>
+  <p class="small">网络路径由 App 做完整校验（CRC32 + SHA-256 + RSA）；串口路径由 Bootloader 做 CRC32 + SHA-256，<b>v1 不做 RSA</b>（物理接触视为授权，见 10.2）。两条路径共用包头解析与 CRC/SHA 代码。</p>
+  <ol>
+    <li><b>早期预检</b>：收到前 512 B 后检查 magic、header_size、file_size ≤ 512+144 KB、image_size 256 B 对齐、hw_id 匹配、版本策略。失败立即 NAK，不必传完。</li>
+    <li><b>流式校验</b>：下载/接收过程中对 image 算 CRC32 和 SHA-256；对 header[0..0x40) 先算一次 SHA-256 初始块。</li>
+    <li><b>收尾</b>：比对 image_size、image_crc32、image_sha256；用内嵌 RSA 公钥验证 signature。</li>
+    <li><b>落标志</b>：全部通过后写 Meta <code>STAGED + verified</code>，source=network/serial。</li>
+  </ol>
+
+  <h3>7.4 为什么用 RSA-2048 而不是 ECDSA</h3>
+  <ul>
+    <li>当前 mbedTLS 配置已启用 <code>MBEDTLS_RSA_C</code>、<code>MBEDTLS_PKCS1_V15</code>、<code>MBEDTLS_SHA256_C</code>、<code>MBEDTLS_BIGNUM_C</code>，握手本身就在用 RSA；<b>验签不需要新增算法模块</b>，只增加少量调用代码。</li>
+    <li>ECDSA 需要额外打开 <code>MBEDTLS_ECDSA_C</code> 等，Flash 和瞬时 RAM 都会增加；在本工程约 2.3 KB 的 heap 余量下不划算。</li>
+    <li>签名 256 B 放在包头，不再单独占 WS/串口的一帧；网络路径中 Bootloader 不验签，只信任 App 写入的 verified 标志；串口路径由 Bootloader 自己校验 CRC/SHA 后写 STAGED，同样不涉及 RSA。</li>
+  </ul>
+
+  <h3>7.5 版本与降级</h3>
+  <p>版本号同时出现在文本上报（<code>fw=1.2.3;hw=yed-s710ym;ota=1</code>）和包头中。默认拒绝低于当前版本的镜像；服务端如需回退，在 OTA 通知/串口 BEGIN 的 flags 中置「允许降级」，并记录审计日志。</p>
+
+  <h3>7.6 构建工具</h3>
+  <ul>
+    <li><code>tools/mkfw.py</code>：输入 elf/bin、版本、hw_id、私钥；输出 <code>.dtufw</code> 和元数据 JSON。</li>
+    <li><code>tools/ota_uart.py</code>：通过调试串口 USART1 发送 <code>.dtufw</code>，支持断点测试。</li>
+    <li><code>tools/ota_https_server.py</code>：本地静态 HTTPS 服务（自签证书即可，设备端 <code>VERIFY_NONE</code>），模拟固件托管与 Range。</li>
+    <li><code>tools/ota_ws.py</code>：模拟服务端下发 OTA 通知。</li>
+    <li><code>tools/merge_hex.py</code>：合并 Boot + App，供产线烧录。</li>
+  </ul>
+</section>
+
+<!-- ============================================================ -->
+<section id="serial">
+  <h2>8. 串口升级（IAP over USART1）</h2>
+
+  <h3>8.1 物理通道</h3>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>通道</th><th>引脚</th><th>默认波特率</th><th>备注</th></tr></thead>
+    <tbody>
+      <tr><td>USART1（调试/日志口）</td><td>PA9 TX / PA10 RX</td><td>115200 8N1</td><td>只使用这个调试串口。当前固件只配了 TX；升级需确认 PA10 已引出并接主机 TX。RS-485（USART2）不参与升级。</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="small">USART1 平时用于日志输出（只 TX）。补上 RX 后，App 可以把收到的 HELLO 当作升级请求：置 <code>BOOT_UART</code> 后复位。Bootloader 阶段独占 USART1，不打印日志，避免二进制协议帧与日志文本混在一起。</p>
+
+  <h3>8.2 进入 Bootloader 的方式</h3>
+  <ol>
+    <li><b>上电握手窗口</b>：每次复位后 Bootloader 先监听 500 ms，收到合法 <code>HELLO</code> 即停留并进入升级模式；否则跳 App。PC 工具以 50 ms 间隔持续发 HELLO 即可命中。</li>
+    <li><b>App 请求</b>：App 收到服务端/串口的升级命令后，置元数据 <code>BOOT_UART</code>，调用 <code>NVIC_SystemReset()</code>；Bootloader 看到该状态后等待 30 s。</li>
+    <li><b>App 无效</b>：直接进入串口升级，无限等待。</li>
+    <li><b>兜底</b>：若 PA10 不可用或线路损坏，用 ISP（BOOT0 + WCHISPStudio）或 WCH-Link 恢复。</li>
+  </ol>
+
+  <h3>8.3 串口帧格式</h3>
+<pre class="flow">┌────────┬──────┬──────┬──────────┬──────────┬───────┬──────────┬────────┐
+│ A5 5A  │ ver  │ type │ status/  │ offset   │  len  │  data    │ crc16  │
+│ 同步头 │ 1B   │ 1B   │ flags 2B │ 4B (LE)  │ 2B LE │  len B   │ 2B LE  │
+└────────┴──────┴──────┴──────────┴──────────┴───────┴──────────┴────────┘
+crc16 = CRC-16/CCITT-FALSE(poly 0x1021, init 0xFFFF)，覆盖 ver..data
+数据最大 256 B；整帧最大 270 B</pre>
+  <p>解析状态机：等待 <code>A5 5A</code> → 收 10 B 帧头 → 按 len 收 data+crc → 校验 CRC；失败则丢弃并重新找同步头。payload 内出现 A5 5A 不会误判，因为解析器在 data 状态按长度消费。</p>
+  <p>DATA 帧的 <code>offset</code> 是<b>整个 <code>.dtufw</code> 文件</b>的偏移，从 0 开始；前 512 B 就是包头。设备把所有文件字节按序写入 Staging（包头也写），校验时从 Staging 头部读包头，搬运时跳过 512 B。</p>
+
+  <h3>8.4 消息类型</h3>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>type</th><th>方向</th><th>名称</th><th>data 内容</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">0x01</td><td>Host→Dev</td><td>HELLO</td><td>空</td><td>请求进入升级模式</td></tr>
+      <tr><td class="mono">0x81</td><td>Dev→Host</td><td>HELLO_ACK</td><td>bl_ver u32, app_ver u32, app_state u8, staging_state u8, chunk u16, hw_id u32（16 B）</td><td>告知能力与当前状态</td></tr>
+      <tr><td class="mono">0x02</td><td>Host→Dev</td><td>BEGIN</td><td>file_size u32, file_crc32 u32, version u32, flags u16（14 B）</td><td>开始传输 <code>.dtufw</code>；设备先做容量/版本预检，详细校验看包头</td></tr>
+      <tr><td class="mono">0x82</td><td>Dev→Host</td><td>BEGIN_ACK</td><td>空或状态详情</td><td>status=0 表示接受；offset 字段保留（v1 恒为 0）</td></tr>
+      <tr><td class="mono">0x03</td><td>Host→Dev</td><td>DATA</td><td>256 B（整个 .dtufw 的字节，最后一帧补 0xFF）</td><td>offset 是文件偏移，必须等于设备期望值；前 512 B 即包头</td></tr>
+      <tr><td class="mono">0x83</td><td>Dev→Host</td><td>DATA_ACK</td><td>空</td><td>offset 返回下一个期望偏移（+256）；若包头预检失败，status 带错误码，主机应中止</td></tr>
+      <tr><td class="mono">0x04</td><td>Host→Dev</td><td>END</td><td>空</td><td>表示文件发完；设备校验 file_size、包头、CRC32/SHA-256（v1 串口路径不验 RSA）</td></tr>
+      <tr><td class="mono">0x84</td><td>Dev→Host</td><td>END_ACK</td><td>空</td><td>status=0 表示整包校验通过并已写 STAGED，随后搬运并重启</td></tr>
+      <tr><td class="mono">0x05</td><td>Host→Dev</td><td>ABORT</td><td>空</td><td>放弃本次升级；设备清除 Staging 有效标记</td></tr>
+      <tr><td class="mono">0x06</td><td>Host→Dev</td><td>RESET</td><td>空</td><td>请求跳转 App（仅当 App 有效）</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>8.5 状态码</h3>
+  <p><code>0</code> OK，<code>1</code> BUSY，<code>2</code> BAD_FRAME，<code>3</code> BAD_STATE，<code>4</code> NO_SPACE，<code>5</code> BAD_SIZE，<code>6</code> FLASH_ERR，<code>7</code> CRC_MISMATCH，<code>8</code> BAD_SIGNATURE，<code>9</code> VERSION_REJECTED，<code>10</code> HW_MISMATCH，<code>11</code> BAD_PACKAGE，<code>12</code> BAD_MAGIC。</p>
+
+  <h3>8.6 典型时序</h3>
+<pre class="flow">Host                         Bootloader                     Flash
+ │                              │                             │
+ ├─ HELLO ─────────────────────►│                             │
+ │◄──────────────── HELLO_ACK ──┤                             │
+ ├─ BEGIN(file_size,crc,ver) ──►│ 检查容量/版本               │
+ │◄──────────────── BEGIN_ACK ──┤                             │
+ ├─ DATA(off=0,256B) ──────────►│ erase 256B + program 256B ─►│
+ │◄──────────────── DATA_ACK ───┤ off=256                     │
+ ├─ DATA(off=256,256B) ────────►│ 前 512B 到齐 → 包头预检     │
+ │◄──────────────── DATA_ACK ───┤ （机型/版本不符则带错码）   │
+ ├─ DATA(...) ─────────────────►│ ... 同时算 CRC32/SHA-256    │
+ │◄──────────────── DATA_ACK ───┤                             │
+ ├─ END() ──────────────────────►│ 整包 CRC/SHA（RSA 可选）    │
+ │◄──────────────── END_ACK ─────┤ 写 Meta STAGED              │
+ │                              ├─ 搬运 Staging+512 → App ──►│
+ │                              ├─ 回读 CRC 校验              │
+ │                              └─ 跳转 App / 复位            │</pre>
+
+  <h3>8.7 耗时估算（128.6 KB 镜像 + 512 B 包头，256 B/帧）</h3>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>通道/波特率</th><th>单帧(270 B)线时间</th><th>约 505 帧</th><th>含擦写/ACK 估算</th></tr></thead>
+    <tbody>
+      <tr><td>UART 115200</td><td>≈ 23.4 ms</td><td>≈ 11.8 s</td><td><b>15–25 s</b></td></tr>
+      <tr><td>UART 921600</td><td>≈ 2.9 ms</td><td>≈ 1.5 s</td><td><b>3–6 s</b></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="small">包头只增加 2 帧，可忽略。以上未计主机处理与 256 B 页擦写时间；需在 Phase 0 实测擦/写单页耗时后修正。</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="network">
+  <h2>9. 网络升级（WS 通知 + HTTPS GET）</h2>
+
+  <div class="callout ok">
+    <strong>控制面与数据面分离</strong>
+    WebSocket 只负责“通知”：服务端下发一条固定格式消息，包含固件包的 <b>HTTPS</b> 地址、文件大小、版本号。固件本体不经过 WS，设备收到通知后主动发 <b>HTTPS GET</b> 下载 <code>.dtufw</code> 包。传输层强制 TLS 1.2；设备<b>不做证书校验</b>（<code>VERIFY_NONE</code>），镜像真实性由 RSA 签名保证。
+  </div>
+
+  <h3>9.1 为什么这样分</h3>
+  <ul>
+    <li><b>固件不挤占业务 WS</b>：128 KB 固件若走 WS 分片，会长时间占用会话、ACK、心跳；HTTPS 下载是独立请求，服务端可用对象存储/CDN 承载。</li>
+    <li><b>服务端简单</b>：固件作为 HTTPS 静态文件托管，支持 Content-Length 和 Range 即可；WS 只需要下发 URL 和接收结果。</li>
+    <li><b>可复用 HTTPS 生态</b>：断点续传（Range）、缓存、CDN、访问控制、下载统计都可直接用。</li>
+    <li><b>设备端可控</b>：下载是设备主动发起的 GET；本版不做域名白名单，但镜像必须通过 RSA 验签。</li>
+  </ul>
+
+  <div class="callout warn">
+    <strong>单 socket 约束：下载前必须关闭 WS</strong>
+    当前 <code>WCHNET_NUM_TCP=1</code>，WS 和 HTTPS 不能同时存在。流程是：收到通知 → 解析 URL → 回复“开始升级” → <b>关闭 WS</b> → 用同一个 TCP socket 连接固件服务器（DNS → TCP → TLS）→ HTTPS GET → 写 Staging → 校验 → 复位。关闭 WS 会释放 WS 的 TLS 上下文，随后为 OTA 重新初始化 TLS；两次握手不重叠，RAM 峰值不叠加。下载期间没有 WS，进度无法实时上报；结果在设备重启重连后上报。若必须实时进度，需要把 <code>WCHNET_NUM_TCP</code> 提到 2，静态 RAM 约增加 2 KB，会吃掉 TLS 握手余量，不推荐。
+  </div>
+
+  <h3>9.2 WS OTA 通知格式</h3>
+  <p>建议用紧凑二进制 TLV，不用 JSON：设备端无需引入 JSON 解析器，字段固定、长度可控。整条消息控制在 240 B 以内，正好落在现有 <code>payload[256]</code> 内。</p>
+
+<pre class="flow">┌──────────────┬──────┬──────┬──────────┬──────────┬──────────┬─────────┬───────┬───────┐
+│ 44 54 55 4F  │ ver  │ type │ flags    │ file_size│ version  │ url_len │  url  │ crc16 │
+│ "DTUO" 4B    │ 1B   │ 1B   │ 2B (LE)  │ 4B (LE)  │ 4B (LE)  │ 2B (LE) │ N B   │ 2B LE │
+└──────────────┴──────┴──────┴──────────┴──────────┴──────────┴─────────┴───────┴───────┘
+type = 0x10 (OTA_NOTIFY)
+flags: bit0=允许降级, bit1=强制升级, bit2=保留
+file_size = 整个 .dtufw 文件大小（512 B 包头 + 补 0xFF 的镜像）
+url = "https://host[:port]/path/file.dtufw"（UTF-8，不含空格/控制字符）
+crc16 = CRC-16/CCITT-FALSE，覆盖 ver..url
+整条消息 = 20 + N 字节；N ≤ 220 时 ≤ 240 B，现有 payload[256] 足够</pre>
+
+  <p>可选增强：在 <code>version</code> 后增加 <code>file_crc32</code>（4 B），设备下载完先比对整个文件 CRC；不增加也不影响正确性，因为包头里有更细的校验。若服务端坚持 JSON，可改成一条文本消息，但设备端需要额外的字符串解析和边界检查，建议只在联调阶段使用。</p>
+
+  <h3>9.3 URL 校验</h3>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>检查项</th><th>规则</th><th>失败处理</th></tr></thead>
+    <tbody>
+      <tr><td>长度</td><td>≤ 220 B（与 payload 匹配）</td><td>丢弃通知，上报 BAD_URL</td></tr>
+      <tr><td>scheme</td><td><b>只接受 <code>https://</code></b>；<code>http://</code>、其他 scheme 一律拒绝</td><td>回 NAK，不发起下载</td></tr>
+      <tr><td>authority</td><td>必须有 host；禁止 userinfo（<code>user:pass@</code>）；端口可省略（默认 443）或显式给出 1–65535</td><td>拒绝</td></tr>
+      <tr><td>host</td><td><b>不校验域名，不维护白名单</b>（评审决定）；只要求是合法的 DNS 名或 IPv4 字面量</td><td>解析失败则在 DNS 阶段中止</td></tr>
+      <tr><td>path / query</td><td>path 以 <code>/</code> 开头，长度 ≤ 160 B，不含 <code>..</code>、空格、CR/LF；允许 <code>?query</code>（如签名 URL），query 计入 220 B 总长</td><td>拒绝</td></tr>
+      <tr><td>file_size</td><td>≤ 512 + 144 KB，且 <code>(file_size - 512) % 256 == 0</code></td><td>拒绝 NO_SPACE/BAD_SIZE</td></tr>
+      <tr><td>version</td><td>默认必须高于当前版本；flags.bit0 才允许降级</td><td>拒绝 VERSION_REJECTED</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="small">不做域名白名单意味着：WS 被劫持或服务端失陷时，设备可能被指向任意 HTTPS 主机。但攻击者没有签名私钥，无法让设备接受恶意镜像；实际风险是带宽消耗、下载失败和隐私泄露，而不是固件被替换。若后续需要收敛，可把白名单做成可选配置，不影响包格式。TLS 也不校验证书，因此它只提供加密，不提供对端身份认证——真实性完全由 RSA 签名承担。</p>
+
+  <h3>9.4 HTTPS 客户端要求</h3>
+  <ul>
+    <li><b>URL 解析</b>：拆出 scheme/host/port/path；host 同时用于 DNS、TLS SNI 和 <code>Host</code> 头。</li>
+    <li><b>TLS</b>：TLS 1.2，<code>VERIFY_NONE</code>，不校验证书链、有效期和主机名；host 为域名时 SNI 设置为该域名，以兼容多域名/虚拟主机；host 为 IPv4 字面量时跳过 SNI。</li>
+    <li><b>请求</b>：<code>GET /path HTTP/1.1</code>、<code>Host:</code>、<code>Connection: close</code>、<code>User-Agent: DTU/1.0</code>；续传时加 <code>Range: bytes=N-</code>。</li>
+    <li><b>响应</b>：接受 <code>200 OK</code>（完整）和 <code>206 Partial Content</code>（续传）；必须校验 <code>Content-Length</code>（或 <code>Content-Range</code>）与通知里的 file_size 一致。</li>
+    <li><b>分块</b>：支持 <code>Transfer-Encoding: chunked</code>（对象存储常见）；也支持直接按 Content-Length 读。两者取其一，不能同时出现。</li>
+    <li><b>重定向</b>：v1 不跟随 3xx（包括跳到另一个 HTTPS 地址）；服务端应直接给最终 URL。</li>
+    <li><b>超时</b>：DNS 5 s、TCP 连接 5 s、TLS 握手 10 s、响应头 10 s、body 空闲 10 s、总时长 5 min；任一步超时即中止，保留旧 App。</li>
+    <li><b>错误</b>：TLS 握手失败、4xx/5xx、Content-Length 不符、body 提前断开 → 记状态、关闭 socket、重连 WS 上报失败；v1 不自动重试，等服务端重新通知。</li>
+  </ul>
+
+  <h3>9.5 下载与切换流程</h3>
+<pre class="flow">Server (WS)                           App                              Flash / Boot
+   │                                   │                                   │
+   ├─ OTA_NOTIFY(url,size,ver,flags) ─►│                                   │
+   │                                   ├─ 解析/校验 https URL/大小/版本    │
+   │◄────── text: ota=starting ────────┤                                   │
+   │                                   ├─ ws close（下一轮主循环）          │
+   │                                   ├─ DNS 解析 url.host                │
+   │                                   ├─ TCP connect host:443             │
+   │                                   ├─ TLS 1.2 握手（VERIFY_NONE）      │
+   │                                   ├─ HTTPS GET /path                 │
+   │                                   │◄── 200 + Content-Length ──────────┤
+   │                                   ├─ 收 512 B 包头 → 解析/预检        │
+   │                                   ├─ 收镜像 → 256 B 页擦写 ──────────►│ Staging
+   │                                   │   同时算 CRC32 + SHA-256          │
+   │                                   ├─ 比对 size/CRC/SHA/RSA 签名       │
+   │                                   ├─ 写 Meta: STAGED(verified) ──────►│ Meta
+   │                                   ├─ 关闭 TLS/TCP                    │
+   │                                   └─ NVIC_SystemReset()               │
+   │                                                                       │
+   │                                                         Bootloader: 搬运 Staging+512 → App
+   │                                                         CRC 回读 → APP_VALID → 跳转
+   │                                                                       │
+   │◄────── WS 重连 + 文本: fw=新版本;ota=done ────────────────────────────┤ 新 App
+</pre>
+  <p class="small">实现注意：<code>on_ws_bin</code> 回调里只解析通知、回 <code>ota=starting</code> 并置状态，<b>不要直接 close</b>；等回调返回、主循环下一轮再执行 <code>ws_client_close</code> / TLS 关闭 / <code>transport_eth_suspend</code>，避免在 <code>ws_client_poll</code> 内部重入。</p>
+
+  <h3>9.6 下载失败/中断</h3>
+  <ul>
+    <li><b>通知阶段失败</b>：URL/版本/大小不合法，WS 还开着，直接回 NAK，不需要关连接。</li>
+    <li><b>TLS 失败</b>：DNS、TCP 或 TLS 握手失败 → 关闭 socket，重连 WS，上报 <code>ota=failed;code=...</code>；旧 App 继续运行。</li>
+    <li><b>下载中断</b>：App 保留 Staging 但 Meta 仍为 APP_VALID；关闭 socket，重新连接 WS，上报 <code>ota=failed;code=...</code>；服务端可重新下发通知（v1 从 0 重传）。</li>
+    <li><b>校验失败</b>：清除 Staging 有效标记（或直接忽略），上报 BAD_SIGNATURE/CRC_MISMATCH；旧 App 继续运行。</li>
+    <li><b>复位前掉电</b>：Meta 未写 STAGED，旧 App 正常启动；Staging 残留不影响。</li>
+    <li><b>结果上报</b>：Bootloader 搬运成功时置 Meta <code>flags.bit2</code>（升级完成待上报）。新 App 首次连上 WS 读到该位，发一次 <code>fw=1.2.3;hw=...;ota=done</code>，然后清 bit2；失败路径由旧 App 发 <code>ota=failed;code=...</code>。这样重启后不会每次连接都重复上报 done。</li>
+  </ul>
+
+  <h3>9.7 断点续传（可选）</h3>
+  <p>v1 从 0 重传。若现场网络差，可每 4 KB 把“已收长度 + 文件 CRC 中间值”写入 Meta 的 STAGED 记录；重新下载时先发 <code>Range: bytes=N-</code>，服务端返回 206 后从 N 继续。设备必须回读 Staging 已写部分重算 CRC32/SHA-256（不保存哈希中间态），并确认 Content-Range 匹配。要求固件服务器支持 Range；对象存储一般默认支持。</p>
+
+  <h3>9.8 服务端职责</h3>
+  <ol>
+    <li><b>HTTPS 托管</b>：把 <code>.dtufw</code> 作为静态文件提供，返回准确的 <code>Content-Length</code>；证书可以是公网 CA 或自签（设备不校验），但建议用有效证书，避免中间设备/合规问题。建议支持 <code>Range</code>，不要用 chunked（设备端两种都支持，但定长更简单）。</li>
+    <li><b>下发通知</b>：在设备 WS 会话上发 OTA_NOTIFY；URL 可使用带过期时间的签名 URL（设备不校验域名，只校验 URL 语法和镜像签名）。</li>
+    <li><b>版本策略</b>：按 model/IMEI/版本/白名单灰度；记录谁被通知、谁成功。</li>
+    <li><b>结果收集</b>：设备重连后上报 <code>ota=done/failed</code>，服务端更新升级状态；失败可按策略再次通知。</li>
+    <li><b>并发控制</b>：同一 IMEI 同时只允许一个 OTA 会话；沿用现有 <code>close_dup</code> 退避。</li>
+  </ol>
+
+  <h3>9.9 资源与耗时</h3>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>项</th><th>估算</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>HTTPS 客户端代码</td><td>3–7 KB Flash</td><td>URL 解析、请求构造、状态行/头部解析、chunked、超时；TLS 复用现有 mbedTLS，不重复计入。</td></tr>
+      <tr><td>HTTPS 缓冲</td><td>约 0.8–1.5 KB BSS</td><td>可复用关闭 WS 后的 <code>TransportRecvBuf</code>（1072 B）+ 512 B 包头 + 224 B URL + 状态；不新增 heap。</td></tr>
+      <tr><td>128.6 KB 下载（LAN，MSS 536）</td><td><b>2–6 s</b></td><td>取决于服务器 RTT/带宽；比 WS 逐帧 ACK 快。</td></tr>
+      <tr><td>TLS 1.2 握手</td><td><b>2–5 s</b></td><td>WS 已关闭并释放上下文，OTA 重新握手；<code>VERIFY_NONE</code> 不做证书链校验。</td></tr>
+      <tr><td>Flash 擦写</td><td>1.5–3 s</td><td>约 505 × 256 B；与网络接收部分重叠。</td></tr>
+      <tr><td>网络升级总时长（HTTPS）</td><td><b>7–20 s</b></td><td>LAN；公网 RTT 50 ms 以上可能到 15–40 s。不含重启搬运。</td></tr>
+      <tr><td>重启搬运</td><td>1–2 s</td><td>Staging+512 → App，144 KB。</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="small">HTTPS 吞吐受 WCHNET MSS=536、单 socket、TLS 记录开销和 Flash 擦写停顿影响；以上为估算，Phase 0/2 需实测。</p>
+
+  <h3>9.10 升级期间的业务</h3>
+  <ul>
+    <li>下载期间 App 不处理 WS 业务，也不处理串口/485 转发（如有），避免 Flash 擦写停顿破坏实时性；服务端应把设备标记为“维护中”。</li>
+    <li>下载完成后复位，新 App 启动再恢复业务；业务侧最多中断十几秒到几十秒。</li>
+    <li>如果业务不允许中断，需要评估“双区运行 + 后台下载”，这会推翻单 App 区设计，不建议在本项目做。</li>
+  </ul>
+</section>
+
+<!-- ============================================================ -->
+<section id="security">
+  <h2>10. 安全设计</h2>
+
+  <h3>10.1 威胁模型</h3>
+  <ul>
+    <li><b>中间人</b>：HTTPS 使用 <code>VERIFY_NONE</code>，链路是加密的但不认证对端；攻击者可以冒充固件服务器返回任意文件。包内 RSA 签名是唯一能阻止恶意镜像的机制。</li>
+    <li><b>服务端被攻破/误操作</b>：攻击者拿到 OTA 通道和通知能力，可以指向任意 HTTPS 地址；没有私钥仍无法构造可接受的镜像。</li>
+    <li><b>无域名白名单</b>：WS 被劫持或服务端失陷时，设备可能被引到任意主机，造成带宽消耗、下载失败或地址泄露；这是已接受的可用性/隐私风险，不是固件替换风险。</li>
+    <li><b>物理串口访问</b>：攻击者接触调试串口，通过 USART1 刷入任意镜像；物理接触按授权处理，串口路径只做 CRC32/SHA-256。</li>
+    <li><b>降级攻击</b>：回滚到有漏洞的旧版本。</li>
+  </ul>
+
+  <h3>10.2 分层防护</h3>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>层</th><th>措施</th><th>优先级</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>镜像真实性</td><td><b>RSA-2048 签名（PKCS#1 v1.5 + SHA-256）</b>，公钥内嵌 App，私钥离线</td><td><span class="tag must">必须</span></td><td>无论 TLS 是否被攻破，设备只接受签名有效的镜像；复用现有 mbedTLS RSA 模块。</td></tr>
+      <tr><td>传输机密性</td><td>控制面继续使用 wss + TLS 1.2；固件下载<b>强制 HTTPS</b>（TLS 1.2）</td><td><span class="tag must">必须</span></td><td>评审决定：网络固件只能通过 HTTPS 下载，不接受明文 HTTP。</td></tr>
+      <tr><td>下载地址</td><td>只接受 <code>https://</code>；校验长度、authority、path、file_size；<b>不校验域名</b>，不跟随重定向</td><td><span class="tag rec">已确认</span></td><td>评审决定不做 host 白名单。签名仍是最终防线；风险是可用性/隐私而非固件替换。</td></tr>
+      <tr><td>服务端身份</td><td><b>不校验证书</b>（<code>VERIFY_NONE</code>）；TLS 仅提供加密</td><td><span class="tag rec">已确认</span></td><td>无 RTC，证书有效期无法可靠校验；接受中间人可返回任意包的风险，由 RSA 签名兜底。</td></tr>
+      <tr><td>防降级</td><td>版本单调递增；低于当前版本默认拒绝，force 需签名/授权</td><td><span class="tag opt">建议</span></td><td>服务端记录审计；串口 force 仅产线使用。</td></tr>
+      <tr><td>物理串口</td><td>校验 CRC32 + SHA-256，不验签</td><td><span class="tag opt">按需</span></td><td>物理接触视为授权；若要求与网络一致，则在 Bootloader 内集成 RSA 验签（预计 +6–8 KB，需评估 16 KB 预算）。</td></tr>
+      <tr><td>Bootloader 保护</td><td><b>产线不开启 WRP</b>；App 侧 Flash 写入范围硬限制在 Staging/Meta，运行时不擦 0x0–0x3FFF</td><td><span class="tag rec">已确认</span></td><td>评审决定不开写保护；返修可直接整片擦除重烧，保护靠代码约束而非硬件。</td></tr>
+      <tr><td>调试口</td><td>量产可关闭调试/限制 SWD</td><td><span class="tag opt">按需</span></td><td>与产线返修流程权衡。</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>10.3 验签流程</h3>
+  <ol>
+    <li>网络下载时，App 对包头前 0x40 B 和整个镜像增量计算 SHA-256，同时计算 image CRC32；串口接收时由 Bootloader 做 CRC32/SHA-256（不验签）。</li>
+    <li>收完后从包头读出 256 B RSA 签名；使用内嵌公钥做 <code>mbedtls_rsa_pkcs1_verify(MBEDTLS_RSA_PUBLIC, MBEDTLS_MD_SHA256, hash, sig)</code>。</li>
+    <li>只有包头字段、CRC32、SHA-256、RSA 全部通过，才写 Meta <code>STAGED + verified</code>。</li>
+    <li>网络路径：Bootloader 信任 App 写入的 <code>verified</code> 标志，只做 CRC 回读校验；串口路径：Bootloader 自己完成 CRC32/SHA-256 后写 STAGED。两条路径都不需要 Bootloader 集成 mbedTLS。</li>
+  </ol>
+
+  <h3>10.4 密钥管理</h3>
+  <ul>
+    <li>私钥只存在于构建机/签名服务，离线或 HSM 保管；不进入仓库、不进入设备。</li>
+    <li>公钥（DER SPKI 或 modulus/exponent）内嵌 App；包头 reserved 可预留 key_id，便于未来轮换。</li>
+    <li>轮换：新公钥随新 App 一起发布；Bootloader 不验签，因此无需更新 Bootloader。</li>
+    <li>泄露应急：发布带新公钥的 App（旧版本仍可能被旧 key 签名，需服务端/设备版本策略配合）。</li>
+  </ul>
+</section>
+
+<!-- ============================================================ -->
+<section id="reliability">
+  <h2>11. 可靠性与异常处理</h2>
+
+  <h3>11.1 掉电矩阵</h3>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th style="width:26%">掉电时刻</th><th>Flash 状态</th><th>下次启动</th><th>结果</th></tr></thead>
+    <tbody>
+      <tr><td>下载 Staging 中</td><td>App 完好；Staging 部分写入</td><td>按 APP_VALID 跳 App</td><td>重新升级；App 不受影响</td></tr>
+      <tr><td>整包校验后、写 Meta 前</td><td>Staging 完整；Meta 仍旧</td><td>跳 App</td><td>服务端重新发起；可加 resume</td></tr>
+      <tr><td>写 Meta STAGED</td><td>两页之一有效</td><td>读到 STAGED 或旧 APP_VALID</td><td>最坏重传，不会双失效</td></tr>
+      <tr><td>搬运 App 中</td><td>Staging 完好；App 部分被擦</td><td>state=COPYING → 重新搬运</td><td>可恢复；若 Staging 校验失败→RECOVERY/Backup</td></tr>
+      <tr><td>搬运完成、写 APP_VALID 前</td><td>App 完整；Meta 仍 COPYING</td><td>重新搬运</td><td>幂等，最终成功</td></tr>
+      <tr><td>写 APP_VALID 中</td><td>一页新记录、一页旧记录</td><td>取有效且 seq 大者</td><td>要么新状态，要么重搬</td></tr>
+      <tr><td>新 App 启动崩溃</td><td>App 完整但运行异常</td><td>attempts 达阈值 → RECOVERY/Backup</td><td>需启用计数/回滚</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>11.2 异常处理原则</h3>
+  <ul>
+    <li><b>先验后写</b>：Staging 的 CRC32/SHA-256/签名全部通过后才写 STAGED；STAGED 后才允许动 App 区。</li>
+    <li><b>可重入</b>：搬运是幂等的（擦一页、写一页、校验），重复执行不会更坏。</li>
+    <li><b>不信任声明长度</b>：OTA 通知/BEGIN 的 <code>file_size</code>、包头里的 <code>file_size/image_size</code>、HTTP <code>Content-Length</code> 必须三者一致，且 ≤ 512+144 KB、256 B 对齐；否则拒绝，避免越界擦写。</li>
+    <li><b>HTTPS 异常</b>：DNS/TCP/TLS 握手失败、404/500、body 提前断开、Content-Length 不符、chunked 解析错、超时 → 中止下载，关闭 socket，重连 WS 上报失败；Staging 残留不影响旧 App。</li>
+    <li><b>读回校验</b>：每页写完可选读回比较；搬运完成后对整个 App 区做 CRC32。</li>
+    <li><b>Flash 错误</b>：<code>FLASH_ROM_ERASE/WRITE</code> 后回读失败 → 重试 1 次 → 仍失败则 NAK/ABORT，保持 App 可用。</li>
+    <li><b>看门狗</b>：App 建议启用 IWDG（2 s），主循环喂狗；单页擦写毫秒级，不会误触发。Bootloader 搬运循环喂狗或暂不启用。</li>
+    <li><b>Meta 写坏</b>：两页都无效 → 进入 RECOVERY，等待串口；这是最后的兜底。</li>
+  </ul>
+
+  <h3>11.3 Backup / 自动回滚（Phase 3）</h3>
+  <p>若产品要求「新固件启动失败自动回旧版」：搬运前先把当前 App 复制到 Backup 并校验；新 App 连续 N 次未确认启动则把 Backup 搬回 App。代价是每次升级多 1–2 s 搬运、Meta 多一个状态、Bootloader 代码略增。分区已预留 152 KB，可随时启用。</p>
+
+  <h3>11.4 变砖边界</h3>
+  <ul>
+    <li><b>Bootloader 本身</b>：不参与升级；产线不开启 WRP，正常升级路径不会写 0x0–0x3FFF，但 App 若越界写仍可能破坏它，因此 Flash 写入范围检查是必须的。彻底损坏时用 ISP 整片擦除或 SWD 重烧。</li>
+    <li><b>App + Staging + Meta 全坏</b>：设备停在 RECOVERY，等待串口；远程无法恢复。若不可接受，必须启用 Backup 或网络恢复 Bootloader。</li>
+    <li><b>恢复手段</b>：WCH-Link SWD（无需 BOOT0）；或 BOOT0=高 + WCHISPStudio 串口/USB。</li>
+  </ul>
+</section>
+
+<!-- ============================================================ -->
+<section id="budget">
+  <h2>12. 资源与性能预算</h2>
+
+  <h3>12.1 Flash</h3>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>项</th><th>预算</th><th>依据 / 备注</th></tr></thead>
+    <tbody>
+      <tr><td>Bootloader</td><td>≤ 16 KB（预计 8–12 KB）</td><td>UART 轮询 + Flash 擦写 + CRC16/CRC32 + Meta + 协议；不含 WCHNET/mbedTLS/printf。</td></tr>
+      <tr><td>App</td><td>≤ 148 KB（基线 144 KB；当前 128.6 KB）</td><td>OTA 包解析/验签 3–5 KB + HTTPS 客户端 3–7 KB + 版本字符串；TLS 复用现有 mbedTLS，不重复计入。预计 135–140 KB，基线余量 4–9 KB，冻结 148 KB 后 8–13 KB。</td></tr>
+      <tr><td>Meta</td><td>8 KB</td><td>2 × 4 KB 页，每页 256 B 记录。</td></tr>
+      <tr><td>Staging</td><td>160 KB</td><td>≥ 148 KB App 上限（含 512 B 包头）。</td></tr>
+      <tr><td>Backup</td><td>152 KB</td><td>预留回滚。</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>12.2 RAM / Heap</h3>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>项</th><th>当前</th><th>方案后</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>BSS</td><td>17304 B</td><td>约 18100–18800 B</td><td>+512 B 包头缓冲、+224 B URL、+约 64 B 状态；WS payload 保持 256，不改。</td></tr>
+      <tr><td>Heap 总量</td><td>15156 B</td><td>约 13650–14360 B</td><td>BSS 增加直接减少 heap。</td></tr>
+      <tr><td>TLS 握手峰值</td><td>12784 B（free 2372）</td><td>free 约 900–1600 B</td><td>WS 与 OTA 的 TLS 握手不重叠，峰值仍是单次握手；HTTPS 缓冲常驻后余量变小，必须回归。若不够，把 HTTPS 缓冲与 WS FIFO 做 union 复用。</td></tr>
+      <tr><td>验签瞬时</td><td>—</td><td>约 1–2 KB</td><td>发生在下载收尾；此时 WS/TLS 已关闭，heap 基本空闲，问题不大。</td></tr>
+      <tr><td>Bootloader RAM</td><td>—</td><td>约 2–3 KB + 2 KB 栈</td><td>256 B 串口帧缓冲 + 256 B Flash 页缓冲 + 状态变量。</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="callout risk">
+    <strong>HTTPS 缓冲会吃掉一部分 TLS 余量</strong>
+    新增包头/URL/状态缓冲约 0.8–1.5 KB BSS，TLS 握手余量从约 2.3 KB 降到约 0.9–1.6 KB。WS 的 TLS 上下文在 OTA 前已释放，OTA 重新握手不会与 WS 叠加；但缓冲是常驻 BSS，握手峰值期间也在。优先复用 <code>TransportRecvBuf</code>，必要时把 HTTPS 缓冲与 WS FIFO 做 union，而不是盲目加大 RAM。Phase 0 实板必须验证 <code>VERIFY_NONE</code> 下的握手峰值。
+  </div>
+
+  <h3>12.3 时间</h3>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>动作</th><th>估算</th><th>备注</th></tr></thead>
+    <tbody>
+      <tr><td>256 B 页擦 + 页写</td><td>2–5 ms</td><td><b>需实测</b>；决定 ACK 延迟和 TCP 停顿。</td></tr>
+      <tr><td>144 KB 搬运（Staging+512 → App）</td><td>1–2 s</td><td>约 576 页，含校验；包头不搬。</td></tr>
+      <tr><td>当前 App → Backup 备份</td><td>1–2 s</td><td>Phase 3 回滚时增加。</td></tr>
+      <tr><td>串口 115200 升级</td><td>15–25 s</td><td>含 ACK 与擦写。</td></tr>
+      <tr><td>OTA TLS 1.2 握手</td><td>2–5 s</td><td>WS 已关闭并释放上下文，OTA 重新握手；<code>VERIFY_NONE</code>。</td></tr>
+      <tr><td>网络 HTTPS 升级</td><td>7–20 s</td><td>LAN，含握手；公网/RTT 50 ms 时 15–40 s。</td></tr>
+      <tr><td>Bootloader 启动窗口</td><td>500 ms</td><td>可调；影响正常启动时间。</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="code">
+  <h2>13. 代码结构与构建</h2>
+
+  <h3>13.1 建议目录</h3>
+<pre class="flow">dtu-ethernet-ble-demo/
+├── Boot/                     # 新工程（或独立 MounRiver 配置）
+│   ├── main.c                # 启动决策 / 跳转
+│   ├── boot_flash.c          # 256B 页擦写、回读、搬运
+│   ├── boot_meta.c           # 双页元数据
+│   ├── boot_uart.c           # USART1 轮询（仅调试串口）
+│   ├── boot_proto.c          # 帧解析、CRC16
+│   ├── boot_update.c         # 串口升级状态机
+│   └── Link_boot.ld          # ORIGIN 0x0, 16K
+├── Common/
+│   ├── flash_layout.h        # 分区常量 + 静态断言
+│   ├── ota_proto.h           # 串口帧结构/类型/状态码
+│   ├── ota_pkg.h             # .dtufw 包头布局/常量
+│   └── ota_crc.c             # CRC16 / CRC32
+├── User/                     # 现有 App
+│   ├── ota_client.c          # WS 通知处理、下载状态机、结果上报
+│   ├── ota_https.c           # HTTPS GET、URL 解析、Content-Length/chunked、Range
+│   ├── ota_pkg.c             # 包头解析、CRC32/SHA-256/RSA 验签
+│   ├── ota_flash.c           # App 侧 Flash 操作
+│   ├── tls_client.c          # 由 wss_tls 泛化：hostname 参数化，WS/OTA 共用
+│   └── version.h             # 构建生成版本号
+├── Ld/Link.ld                # App: ORIGIN 0x4000, 144K
+├── tools/
+│   ├── mkfw.py               # 生成 .dtufw 签名包
+│   ├── ota_uart.py           # 调试串口 USART1 发送 .dtufw
+│   ├── ota_https_server.py   # 本地静态 HTTPS 服务（自签证书，Content-Length/Range）
+│   ├── ota_ws.py             # 模拟 WS OTA 通知
+│   └── merge_hex.py          # Boot + App 合并
+└── obj/                      # MounRiver 生成；加入 .gitignore</pre>
+
+  <h3>13.2 构建方式</h3>
+  <ul>
+    <li><b>两个 MounRiver 工程</b>：<code>boot</code> 与 <code>app</code>；共享 <code>Common/</code>、<code>Startup/</code>、<code>Core/</code>、<code>Peripheral/</code>。App 工程保持现有 <code>Net/</code>、<code>mbedtls/</code>、<code>User/</code>；Boot 工程不包含这些。</li>
+    <li><b>链接脚本</b>：Boot 用 <code>Link_boot.ld</code>，App 用 <code>Ld/Link.ld</code>（改 ORIGIN）。</li>
+    <li><b>版本生成</b>：构建前由脚本写 <code>User/version.h</code>（版本号、hw_id、构建时间），或从 <code>dtu_config.h</code> 的宏派生；确保 App、Boot、工具三方一致。</li>
+    <li><b>合并镜像</b>：<code>merge_hex.py</code> 输出 <code>combined.hex</code>，产线用 WCHISPStudio 一次烧录。</li>
+  </ul>
+
+  <h3>13.3 开发与产线流程</h3>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>场景</th><th>操作</th><th>注意</th></tr></thead>
+    <tbody>
+      <tr><td>首次上板 / Bootloader 变更</td><td>烧 <code>combined.hex</code>（Boot + App）</td><td>WCH-Link SWD 或 ISP；烧完首次启动进入 EMPTY，需写 APP_VALID 或走一次串口升级。</td></tr>
+      <tr><td>日常 App 迭代</td><td>串口 IAP（推荐）或 WCH-Link 仅烧 0x4000 区</td><td>WCH-Link 工具若默认整片擦除，会擦掉 Boot；需关闭整片擦除或用 IAP。</td></tr>
+      <tr><td>现场升级</td><td>网络 OTA（优先，HTTPS）或调试串口 USART1</td><td>服务端灰度；升级期间暂停业务。</td></tr>
+      <tr><td>救砖</td><td>BOOT0=高 + WCHISPStudio，或 WCH-Link SWD</td><td>整片擦除后重新烧 combined.hex。</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>13.4 与现有代码的改动点</h3>
+  <ul>
+    <li><code>User/ws_client.h</code>：<code>payload[256]</code> 保持不变（OTA 通知 ≤ 240 B）；只有 URL 上限放宽到 220 B 以上时才扩到 320 B。</li>
+    <li><code>User/dtu_app.c</code>：<code>on_ws_bin</code> 先识别 <code>"DTUO"</code> 魔术字与 type=0x10，转 OTA 模块；WS open 后上报版本文本和（若有）<code>ota=done</code>；收到通知只置状态，<b>由主循环下一轮</b>关闭 WS/TLS 并进入下载状态机。</li>
+    <li><code>User/transport_eth.c/.h</code>：把远端 host/port 参数化，新增 <code>transport_eth_suspend()/resume()</code>，让同一个 socket 在 WS 与 HTTPS 之间分时复用；DNS 回调按目标 host 触发。</li>
+    <li><code>User/wss_tls.c/.h</code>：泛化为 <code>tls_client.c/.h</code>，把写死的 <code>DTU_HOST</code> 改成参数（同时用于 SNI 和 <code>Host</code> 头），WS 与 OTA 共用；保持 <code>VERIFY_NONE</code>。同一时刻只允许一个 TLS 会话，OTA 前先关闭 WS 的 TLS 上下文。</li>
+    <li><code>User/main.c</code>：无 Bootloader 的调试构建仍可从 0x0 链接；OTA 构建从 0x4000。</li>
+    <li><code>Debug/debug.c</code>：新增 UART RX（PA10）初始化，供 App 触发串口升级/调试；Bootloader 使用独立的轻量 UART 驱动。</li>
+    <li><code>Ld/Link.ld</code>：ORIGIN 0x4000、LENGTH 144K；新增 <code>Ld/Link_boot.ld</code>。</li>
+    <li><code>Net/net_config.h</code>：<code>WCHNET_NUM_TCP</code> 保持 1，不为了 HTTPS 并发加 socket；<code>User/mbedtls_config.h</code> 无需改，TLS 和签名都复用现有 RSA/SHA-256。</li>
+  </ul>
+</section>
+
+<!-- ============================================================ -->
+<section id="plan">
+  <h2>14. 分阶段实施</h2>
+
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th style="width:12%">阶段</th><th>目标</th><th>主要工作</th><th>验收</th><th style="width:10%">估算</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>Phase 0</b><br>可行性</td>
+        <td>确认 Flash/搬运/跳转/HTTPS 可行</td>
+        <td>写最小测试程序：擦写 Staging 页并回读；测非零等待区擦写；测 0x08000000 别名；测 256 B 页耗时；Boot→App 跳转验证；测 500 ms 串口窗口；用单 socket 跑通一次 TLS 1.2 握手（VERIFY_NONE、hostname 参数化）+ HTTPS GET 并测吞吐与 heap 峰值。</td>
+        <td>实板日志通过；耗时/内存数据落表；确认 160K/32K 选项字节；HTTPS 下载 128 KB 能在可接受时间内完成，TLS 握手不 OOM。</td>
+        <td>2–3 天</td>
+      </tr>
+      <tr>
+        <td><b>Phase 1</b><br>Boot + 串口</td>
+        <td>不会变砖的底线</td>
+        <td>Bootloader 工程、分区、Meta 双页、USART1 驱动、串口协议、Python 工具、合并 hex、启动决策与搬运。</td>
+        <td>串口升级成功；断点/掉电可恢复；App 无效时能停在 Boot 等串口；WCHISP 救砖可用。</td>
+        <td>3–5 天</td>
+      </tr>
+      <tr>
+        <td><b>Phase 2</b><br>网络 OTA</td>
+        <td>远程升级闭环</td>
+        <td>WS OTA 通知、HTTPS GET（TLS 主机名参数化、VERIFY_NONE）/chunked/超时、包头解析、Staging 写入、CRC/SHA/RSA、结果上报、复位切换；固件 HTTPS 托管与联调工具。</td>
+        <td>正常网络升级成功；非 HTTPS URL 被拒；404/TLS 失败/截断/坏签名被拒；重启后版本更新并上报 done。</td>
+        <td>5–7 天<br><span class="small">+ 服务端</span></td>
+      </tr>
+      <tr>
+        <td><b>Phase 3</b><br>加固</td>
+        <td>现场可靠性/安全</td>
+        <td>Backup 自动回滚、启动尝试计数、HTTPS Range 续传、看门狗、产线流程。不含 RS-485 通道和 WRP。</td>
+        <td>掉电/回滚/续传/安全测试全通过；产线可重复烧录（无 WRP）。</td>
+        <td>3–5 天</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="small">总计约 3–4 周（不含服务端排期与硬件改板）。HTTPS 客户端、TLS 泛化和打包/验签是新增工作量的主要来源；建议 Phase 0 通过后再冻结分区、包头字段和 WS 通知格式，避免返工。</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="test">
+  <h2>15. 测试计划</h2>
+
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th style="width:6%">#</th><th>用例</th><th>步骤 / 注入</th><th>预期</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>串口正常升级</td><td>USART1，115200，PC 工具发 HELLO + 完整 <code>.dtufw</code></td><td>END_ACK OK；重启后版本更新；业务正常</td></tr>
+      <tr><td>2</td><td>网络正常升级</td><td>WS 下发通知；设备 HTTPS GET 下载 <code>.dtufw</code></td><td>TLS 握手、下载/校验成功；重启后版本更新；WS 重连上报 done</td></tr>
+      <tr><td>3</td><td>HTTPS 下载中断</td><td>body 传到 50% 时服务器 RST</td><td>旧 App 继续运行；重连 WS 上报 failed；Staging 不被信任</td></tr>
+      <tr><td>4</td><td>下载中掉电</td><td>Staging 写一半断电重启</td><td>旧 App 正常启动；Staging 不被信任</td></tr>
+      <tr><td>5</td><td>校验后、STAGED 前掉电</td><td>整包校验通过后立即断电</td><td>旧 App 启动或重新搬运；无半镜像运行</td></tr>
+      <tr><td>6</td><td>搬运中掉电</td><td>搬运 50% 断电重启</td><td>Bootloader 重新搬运；最终成功</td></tr>
+      <tr><td>7</td><td>Meta 写掉电</td><td>擦/写 Meta 时断电</td><td>另一页旧记录仍有效；不双失效</td></tr>
+      <tr><td>8</td><td>CRC 错误</td><td>篡改镜像 1 字节</td><td>NAK/上报 CRC_MISMATCH；App 不变</td></tr>
+      <tr><td>9</td><td>签名错误</td><td>错误私钥/改签名</td><td>NAK/上报 BAD_SIGNATURE；App 不变</td></tr>
+      <tr><td>10</td><td>机型/硬件不匹配</td><td>包头 hw_id 不符</td><td>收到前 512 B 后即拒绝 HW_MISMATCH，不必传完</td></tr>
+      <tr><td>11</td><td>文件超长/尺寸不符</td><td>file_size &gt; 512+144 KB，或通知/包头/Content-Length 三者不一致</td><td>预检拒绝 NO_SPACE/BAD_SIZE；无越界擦写</td></tr>
+      <tr><td>12</td><td>HTTPS 4xx/5xx</td><td>服务器返回 404/403/500</td><td>中止下载；旧 App 不变；上报 failed</td></tr>
+      <tr><td>13</td><td>Content-Length 不符/截断</td><td>声明 128 KB，只发 100 KB 后关闭</td><td>检测到短读；中止；旧 App 不变</td></tr>
+      <tr><td>14</td><td>chunked 响应</td><td>服务器用 Transfer-Encoding: chunked</td><td>正确解析并写入 Staging；校验通过</td></tr>
+      <tr><td>15</td><td>慢服务器/超时</td><td>TLS 握手、响应头或 body 停顿超时</td><td>超时中止；关闭 socket；重连上报 failed</td></tr>
+      <tr><td>16</td><td>DNS 失败</td><td>URL host 解析不到</td><td>5 s 超时中止；旧 App 不变；上报 failed</td></tr>
+      <tr><td>17</td><td>非 HTTPS/畸形 URL</td><td>通知里给 <code>http://</code>、<code>ftp://</code>、含 userinfo、超长或 CR/LF</td><td>拒绝，不发起下载；上报 BAD_URL</td></tr>
+      <tr><td>18</td><td>HTTPS Range 续传（Phase 3）</td><td>下载 50% 断开，重新通知并带 Range</td><td>206 从断点继续；最终校验通过</td></tr>
+      <tr><td>19</td><td>通知阶段 WS 断开</td><td>收到通知后、关闭 WS 前断网</td><td>设备重连后重新接收通知；不进入半升级状态</td></tr>
+      <tr><td>20</td><td>结果上报</td><td>升级成功后重启；失败场景重启</td><td>分别上报 <code>ota=done</code> / <code>ota=failed;code=...</code></td></tr>
+      <tr><td>21</td><td>App 无效 + 串口恢复</td><td>擦除 App 区后重启</td><td>停在 Boot；USART1 串口升级后恢复</td></tr>
+      <tr><td>22</td><td>启动失败计数</td><td>新 App 启动即崩溃（模拟）</td><td>达到阈值进入 RECOVERY；可回滚/串口恢复</td></tr>
+      <tr><td>23</td><td>Heap 回归</td><td>WS TLS 握手 + HTTPS 缓冲常驻 + OTA TLS 握手</td><td>两次握手不 OOM；HTTPS 下载/验签有足够 heap</td></tr>
+      <tr><td>24</td><td>产线重复烧录（无 WRP）</td><td><code>combined.hex</code> 反复烧 10 次；随后走一次 OTA</td><td>Boot/App 版本一致；无 WRP 时返修可整片擦除</td></tr>
+      <tr><td>25</td><td>TLS 证书策略</td><td>固件服务器使用自签/过期证书；另测仅支持 TLS 1.0 的服务器</td><td>自签/过期仍可握手（VERIFY_NONE）；TLS 1.0/握手失败则中止并上报</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="decisions">
+  <h2>16. 决策记录（已确认）</h2>
+  <p>以下为评审确认结果；未特别说明的按推荐值执行。包头字段、WS 通知格式和 Flash 分区建议在 Phase 0 通过后冻结。</p>
+
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th style="width:4%">#</th><th style="width:34%">问题</th><th>结论</th><th style="width:18%">影响</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>串口升级走哪个口？</td><td><b>只走调试串口 USART1 PA9/PA10</b>；RS-485（USART2）不参与升级。</td><td>需确认 PA10 已引出</td></tr>
+      <tr><td>2</td><td>网络升级是否采用「WS 通知 + HTTPS GET」？</td><td><b>是</b>。WS 只传 URL/大小/版本；固件走 HTTPS，不挤占业务 WS。</td><td>服务端要 HTTPS 托管固件、下发通知</td></tr>
+      <tr><td>3</td><td>串口与网络是否共用同一固件包？</td><td><b>是</b>。<code>.dtufw</code> = 512 B 包头 + 镜像；两条通道传同一文件。</td><td>打包工具/校验逻辑统一</td></tr>
+      <tr><td>4</td><td>网络镜像是否强制 RSA 签名？</td><td><b>强制</b>；复用现有 mbedTLS RSA/SHA-256。私钥离线。</td><td>App +2–4 KB，验签 +1–2 KB RAM</td></tr>
+      <tr><td>5</td><td>固件下载用 HTTP 还是 HTTPS？</td><td><b>只允许 HTTPS</b>（TLS 1.2），放在 Phase 2 实现；<code>http://</code> 一律拒绝。</td><td>每次 OTA 增加 TLS 握手 2–5 s</td></tr>
+      <tr><td>6</td><td>是否做固件 URL 的 host 白名单？</td><td><b>不做域名校验</b>；只校验 scheme=https、长度、authority、path 和尺寸。接受被指向任意 HTTPS 主机的可用性/隐私风险，由 RSA 签名兜底。</td><td>实现简化；无 host 收敛</td></tr>
+      <tr><td>7</td><td>WS 通知用二进制还是 JSON？</td><td><b>二进制 TLV</b>（≤240 B，复用 payload[256]）；JSON 只用于联调。</td><td>设备端免 JSON 解析</td></tr>
+      <tr><td>8</td><td>下载期间是否关闭 WS？</td><td><b>关闭</b>。<code>WCHNET_NUM_TCP=1</code>；接受“开始/结束”两个状态，不做百分比。</td><td>无法实时进度；省 2 KB RAM</td></tr>
+      <tr><td>9</td><td>是否要求自动回滚？</td><td>v1 不启用；<b>先预留 152 KB Backup</b>，Phase 3 视现场要求开启。</td><td>回滚增加搬运时间与 Meta 状态</td></tr>
+      <tr><td>10</td><td>是否启用启动尝试计数？</td><td><b>启用</b>（5 次 / 30 s 确认）；Phase 3 落地。</td><td>每次启动写 Meta</td></tr>
+      <tr><td>11</td><td>Bootloader 要不要网络恢复？</td><td><b>v1 不做</b>；App 损坏靠调试串口/Backup。强制 HTTPS 后 Bootloader 还需 mbedTLS，更不可行。</td><td>Bootloader 体积/复杂度</td></tr>
+      <tr><td>12</td><td>500 ms 启动串口窗口是否可接受？</td><td><b>可接受</b>；可缩短到 200–300 ms，代价是 PC 工具更难命中。</td><td>正常启动延迟</td></tr>
+      <tr><td>13</td><td>App 144 KB 是否够？</td><td>当前 128.6 KB + OTA/HTTPS 预计 135–140 KB，余量 4–9 KB，<b>偏紧</b>。本版结论：Phase 0 通过后冻结 <b>Boot 12 KB + App 148 KB @0x3000</b>，Meta/Staging/Backup 地址不变；构建加 size gate（&gt;140 KB 警告，&gt;148 KB 失败）。详见 5.4。</td><td>Bootloader 不能 OTA，边界必须一次定对</td></tr>
+      <tr><td>14</td><td>HTTPS 断点续传是否 v1 就做？</td><td><b>Phase 3</b>；v1 失败从 0 重传。要求服务器支持 Range。</td><td>增加 Range/checkpoint 逻辑</td></tr>
+      <tr><td>15</td><td>TLS 是否开启证书校验/公钥固定？</td><td><b>不校验</b>（<code>VERIFY_NONE</code>）；TLS 只提供加密，镜像真实性由 RSA 签名保证。</td><td>无证书链 RAM/Flash 开销</td></tr>
+      <tr><td>16</td><td>产线是否开启 WRP 保护 Bootloader？</td><td><b>不开启</b>；保护依赖分区边界与 App 写入范围检查，返修可直接整片擦除。</td><td>无写保护/恢复流程</td></tr>
+      <tr><td>17</td><td>OTA 触发策略？</td><td>服务端按版本/白名单灰度；设备不主动轮询。</td><td>服务端策略</td></tr>
+      <tr><td>18</td><td>升级期间业务策略？</td><td><b>暂停业务上报与串口/485 转发</b>；结束后恢复。服务端标记设备“维护中”。</td><td>业务可用性</td></tr>
+      <tr><td>19</td><td>串口升级是否要求 RSA 验签？</td><td>v1 只校验 CRC32/SHA-256，物理接触视为授权；若要求与网络一致，Bootloader 集成 RSA（预计 +6–8 KB）。</td><td>Bootloader 体积</td></tr>
+      <tr><td>20</td><td>是否采用 A/B 双分区？</td><td><b>不采用，保留拷贝方案</b>。A/B 的执行槽必有一个在非零等待区，性能按版本交替下降；且需双链接地址、双构建、服务端双包。详见 5.5；若 Phase 0 实测慢速槽可接受且发布管线支持，再重新评估。</td><td>性能与发布流程</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="callout ok">
+    <strong>本版（v0.4）新增</strong>
+    5.4 容量规划与增长路径，建议冻结 Boot 12 KB + App 148 KB @0x3000；5.5 A/B 双分区备选方案及量化对比，结论为不采用；决策表新增第 20 条。v0.3 已确认的串口仅 USART1、网络强制 HTTPS、无 host 白名单、TLS <code>VERIFY_NONE</code>、产线不开启 WRP 均不变。
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="refs">
+  <h2>17. 参考资料</h2>
+  <ul>
+    <li>WCH CH32V208 数据手册（480 KB CodeFlash、28 KB System Boot Flash、128K/144K/160K 零等待配置）：
+      <a href="http://hubtronics.in/docs/CH32V208CBU6.pdf">CH32V208 Datasheet (PDF)</a></li>
+    <li>WCH 论坛：CH32V208 Flash/RAM 配置与 480K 空间说明：
+      <a href="https://wch.cn/bbs/thread-113329-1.html">thread-113329</a>、
+      <a href="https://wch.cn/bbs/thread-142699-1.html">thread-142699</a></li>
+    <li>WCH 论坛：CH32V208 出厂 IAP/ISP Bootloader 与串口下载：
+      <a href="https://www.wch.cn/bbs/thread-97858-1.html">thread-97858</a>、
+      <a href="https://wch.cn/bbs/thread-111079-1.html">thread-111079</a></li>
+    <li>WCHISPTool / WCHISPStudio（ISP 串口/USB 下载）：
+      <a href="https://www.wch.cn/downloads/WCHISPTool_Setup_exe.html">WCHISPTool</a></li>
+    <li>CH32V20x EVT 中的 IAP 示例（Bootloader + APP 两个工程、APP 链接偏移）：
+      WCH 官网 CH32V20x EVT 压缩包内 <code>EXAM/IAP</code> 目录。</li>
+    <li>mbedTLS 2.28 文档（RSA PKCS#1 v1.5 验签、SHA-256）：
+      <a href="https://tls.mbed.org/api/rsa_8h.html">mbedTLS RSA API</a></li>
+    <li>RFC 6455（WebSocket 帧格式）：
+      <a href="https://datatracker.ietf.org/doc/html/rfc6455">RFC 6455</a></li>
+    <li>RFC 9110（HTTP 语义：GET、Content-Length、状态码）：
+      <a href="https://datatracker.ietf.org/doc/html/rfc9110">RFC 9110</a></li>
+    <li>RFC 9112（HTTP/1.1 报文与 chunked）：
+      <a href="https://datatracker.ietf.org/doc/html/rfc9112">RFC 9112</a></li>
+    <li>RFC 7233（HTTP Range 请求，断点续传）：
+      <a href="https://datatracker.ietf.org/doc/html/rfc7233">RFC 7233</a></li>
+    <li>RFC 5246（TLS 1.2，OTA HTTPS 连接使用）：
+      <a href="https://datatracker.ietf.org/doc/html/rfc5246">RFC 5246</a></li>
+  </ul>
+
+  <hr style="border:none;border-top:1px solid var(--line);margin:22px 0">
+  <p class="small">评审记录：<span class="kbd">待填写</span>　结论：<span class="kbd">待填写</span>　后续动作：<span class="kbd">待填写</span></p>
+  <p class="small">本文档只描述方案，不包含代码改动。Phase 0 通过后再开始改链接脚本与 Bootloader。</p>
+</section>
+
+</main>
+</div>
+
+<footer>
+  <p>dtu-ethernet-ble-demo · CH32V208WBU6 · 固件升级方案 v0.4（串口仅 USART1 · 网络 WS 通知 + HTTPS GET）· 2026-11-03 · 供内部评审</p>
+</footer>
+</body>
+</html>
