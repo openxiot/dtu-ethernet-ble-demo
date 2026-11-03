@@ -10,31 +10,29 @@
 ## 0. 快速开始
 
 ```sh
-# 1) 工具链加入 PATH（macOS 示例，见 1.1）
-export MRS_BIN="/Applications/MounRiver Studio 3.app/Contents/Resources/app/resources/darwin/components/WCH/Toolchain/RISC-V Embedded GCC/bin"
-export PATH="$MRS_BIN:$PATH"
+# 1) 一键构建（脚本自动定位 MRS 工具链；App 需先在 MRS 里构建过一次，生成 obj/makefile）
+./build-all.sh
+#    产物：build/dtu-full.hex（Boot+App）、build/dtu-<ver>.dtufw（签名固件包）
 
-# 2) 编译（App 需先在 MRS 里构建过一次，生成 obj/makefile）
-make -C Bootloader
-make -C obj all
+#    也可分步执行：
+#    ./build-bootloader.sh   # -> Bootloader/build/bootloader.hex
+#    ./build-app.sh          # -> obj/dtu-ethernet-ble-demo.hex
+#    ./merge-image.sh        # -> build/dtu-full.hex
+#    ./pack-firmware.sh      # -> build/dtu-<OTA_FW_VERSION>.dtufw；--key 换签名私钥
 
-# 3) 打包（版本号与 User/ota_config.h 的 OTA_FW_VERSION 保持一致）
-python3 tools/mkfw.py --hex obj/dtu-ethernet-ble-demo.hex \
-    --version 0.1.0 --key tools/keys/dev_private.pem \
-    --pub tools/keys/dev_public.der -o build/dtu-0.1.0.dtufw
+# 2) 产线/首次烧录：用 MRS 的 Download 烧 build/dtu-full.hex，
+#    或用 7.2.3 的 OpenOCD 命令行
 
-# 4) 产线/首次烧录：合并 Boot + App
-python3 tools/merge_hex.py Bootloader/build/bootloader.hex \
-    obj/dtu-ethernet-ble-demo.hex -o build/dtu-full.hex
-#    用 MRS 的 Download 烧 build/dtu-full.hex，或用 7.2.3 的 OpenOCD 命令行
-
-# 5) 串口升级（先运行工具，再复位设备）
+# 3) 串口升级（先运行工具，再复位设备）
 python3 tools/ota_uart.py /dev/tty.usbserial-XXXX build/dtu-0.1.0.dtufw
 ```
 
 > **首次上电必读**：合并 hex 不含 OTA Meta 区。新板烧完重启时 Meta 为 `EMPTY`，
-> Bootloader 会**无限等待串口升级**，不会自行进入 App。必须再用第 5 步刷一次固件包
-> （升级过程会写入 Meta 与 App），设备才会正常运行。见 [7.3](#73-产线--首次烧录合并-hex)。
+> Bootloader 会**无限等待串口升级**，不会自行进入 App。必须再用第 3 步刷一次固件包
+> （升级过程会写入 Meta 与 App），设备才会正常运行。见 [7.2.6](#726-为什么初次烧完还要串口-iap)。
+
+各脚本的参数（`--clean`、`--version`、`--key` 等）用 `./<脚本> --help` 查看；
+手动命令的完整说明见第 3–6 节。
 
 ---
 
@@ -126,6 +124,8 @@ MRS 3 基于 VS Code 界面，不是 Eclipse 的 Import 流程：
 ```sh
 make -C obj all      # 增量构建，等价于 MRS 的 Build
 make -C obj clean    # 清理 App 目标文件
+
+./build-app.sh       # 等价封装：定位工具链、构建并校验 0x3000 起始/148 KB 上限
 ```
 
 > 全新克隆的仓库没有 `obj/`，命令行无法直接构建；先在 MRS 里构建一次即可。
@@ -142,6 +142,8 @@ App 链接上限 148 KB（`0x3000–0x27FFF`），超过会链接失败。
 make -C Bootloader          # 构建 + 自动检查 12 KB 上限
 make -C Bootloader size     # 只打印体积并检查上限
 make -C Bootloader clean    # 清理
+
+./build-bootloader.sh       # 等价封装：定位工具链，并校验 hex 位于 0x0–0x2FFF
 ```
 
 产物：
@@ -213,6 +215,14 @@ python3 tools/pubkey2h.py prod_public.der -o User/ota_pubkey.h
 ---
 
 ## 6. 生成固件包 `.dtufw`
+
+```sh
+./pack-firmware.sh                 # 版本取 OTA_FW_VERSION，默认 dev 私钥
+./pack-firmware.sh --version 0.2.0 --key prod_private.pem
+```
+
+脚本会检查签名私钥是否与 `User/ota_pubkey.h` 内嵌公钥一致（网络 OTA 必须一致），
+并自动用同名 `*_public.der` 做打包后验签自检。等价的底层命令：
 
 ```sh
 python3 tools/mkfw.py --hex obj/dtu-ethernet-ble-demo.hex \
@@ -698,6 +708,13 @@ App 启动 30 s 后调用 `confirm_running()`：写回 `APP_VALID`、attempts=0�
 # 工具链
 export MRS_BIN="/Applications/MounRiver Studio 3.app/Contents/Resources/app/resources/darwin/components/WCH/Toolchain/RISC-V Embedded GCC/bin"
 export PATH="$MRS_BIN:$PATH"
+
+# 脚本（自动定位工具链；MRS_BIN/PATH 可省略）
+./build-all.sh                                   # Boot + App + 合并 + 打包
+./build-bootloader.sh                            # 仅 Bootloader
+./build-app.sh                                   # 仅 App
+./merge-image.sh                                 # build/dtu-full.hex
+./pack-firmware.sh --version 0.2.0 --key tools/keys/dev_private.pem
 
 # 编译
 make -C Bootloader                 # Bootloader + 12 KB 检查

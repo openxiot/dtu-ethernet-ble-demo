@@ -44,11 +44,17 @@ Bootloader/              独立 Bootloader 工程（Makefile 构建）
   boot_flash.c/.h        Flash 擦写与 Staging→App 搬运
   boot_uart.c/.h         USART1 逐字节收发（PA9/PA10）
   Link_boot.ld           0x0 起 12 KB
-tools/                   打包与升级工具（Python 3）
+tools/                   打包、构建与升级工具（Python 3 / Shell）
+  build-env.sh           公共构建环境（定位 MRS 工具链、读版本）
   mkfw.py                生成 .dtufw 固件包
   merge_hex.py           合并 Boot + App，供产线烧录
   ota_uart.py            串口 IAP 主机端
   keys/                  开发用密钥（私钥被 .gitignore 忽略）
+build-all.sh             一键构建：Boot + App + 合并 + 打包
+build-bootloader.sh      构建 Bootloader（校验 12 KB 上限）
+build-app.sh             构建 App（校验 0x3000 起始 / 148 KB 上限）
+merge-image.sh           生成 build/dtu-full.hex
+pack-firmware.sh         生成 build/dtu-<ver>.dtufw
 Net/                     以太网协议栈（已拷入 WCH 官方 NetLib）
   NetLib/                wchnet.h / libwchnet.a / eth_driver.c / eth_driver.h
   net_config.h           协议栈配置（TCP 数量、MSS、缓冲等）
@@ -94,6 +100,7 @@ doc/说明.md              板卡说明、WCH-LINK 接线
    `.cproject`/`.project` 已配好源文件、头文件路径与 `libwchnet.a` 链接。
 3. **构建**：右键工程 → `Build Project`（或 `ReBuild Project`）。`obj/` 不入库，由 MRS 自动生成，
    产物 `obj/dtu-ethernet-ble-demo.hex`。`Bootloader/` 已在工程中排除，不会混入 App 构建。
+   命令行可用 `./build-app.sh`（自动定位工具链并校验分区），或一键 `./build-all.sh`。
 4. **烧录接线（WCH-Link）**：
 
    | WCH-LINK | 板子 |
@@ -137,7 +144,8 @@ doc/说明.md              板卡说明、WCH-LINK 接线
 `.../WCH/Toolchain/RISC-V Embedded GCC/bin`），然后：
 
 ```sh
-make -C Bootloader
+./build-bootloader.sh       # 自动定位工具链并校验 0x0 起始 / 12 KB 上限
+# 或：make -C Bootloader
 ```
 
 产物 `Bootloader/build/bootloader.{hex,bin,elf}`；Makefile 带 size gate，超过 12 KB 直接失败。
@@ -146,6 +154,13 @@ App 仍用 MounRiver IDE 构建（新增的 `User/ota_*.c` 位于工程源目录
 ### 5.3 生成固件包
 
 先用 `User/ota_config.h` 的 `OTA_FW_VERSION` 定义新版本并重新编译，再打包：
+
+```sh
+./pack-firmware.sh                 # 版本默认取 OTA_FW_VERSION，默认 dev 私钥
+./pack-firmware.sh --version 0.2.0 --key prod_private.pem
+```
+
+等价的底层命令：
 
 ```sh
 python3 tools/mkfw.py --hex obj/dtu-ethernet-ble-demo.hex \
@@ -164,8 +179,9 @@ python3 tools/mkfw.py --hex obj/dtu-ethernet-ble-demo.hex \
 ### 5.4 产线合并烧录
 
 ```sh
-python3 tools/merge_hex.py Bootloader/build/bootloader.hex \
-    obj/dtu-ethernet-ble-demo.hex -o build/dtu-full.hex
+./merge-image.sh                   # -> build/dtu-full.hex
+# 或：python3 tools/merge_hex.py Bootloader/build/bootloader.hex \
+#       obj/dtu-ethernet-ble-demo.hex -o build/dtu-full.hex
 ```
 
 工具校验 Boot < `0x3000`、App 在 `0x3000..0x27FFF` 后合并，用 WCH-Link 一次烧录。

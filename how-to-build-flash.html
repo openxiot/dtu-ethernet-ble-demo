@@ -396,12 +396,16 @@ obj/dtu-ethernet-ble-demo.elf    # 调试
 obj/dtu-ethernet-ble-demo.map    # 体积分析</code></pre>
   <p>首次构建会生成 <code>obj/makefile</code>（含本机绝对路径，由 MRS 维护）。之后可用命令行增量构建：</p>
   <pre><code>make -C obj all
-make -C obj clean</code></pre>
+make -C obj clean
+
+./build-app.sh       # 等价封装：自动定位工具链 + 校验 0x3000 起始 / 148 KB 上限</code></pre>
 
   <h3>4.3 编译 Bootloader</h3>
   <pre><code>make -C Bootloader          # 构建 + 自动检查 12 KB 上限
 make -C Bootloader size     # 只打印体积并检查
-make -C Bootloader clean</code></pre>
+make -C Bootloader clean
+
+./build-bootloader.sh       # 等价封装：自动定位工具链 + 校验 0x0–0x2FFF</code></pre>
   <p>产物 <code>Bootloader/build/bootloader.{hex,bin,elf,map}</code>。Makefile 内置 size gate：<code>text + data</code> 超过 12288 字节直接失败（当前约 9060 字节）。</p>
 
   <h3>4.4 版本、hw_id、密钥</h3>
@@ -420,6 +424,9 @@ python3 tools/pubkey2h.py prod_public.der -o User/ota_pubkey.h</code></pre>
   <p class="small">私钥不得入库；Bootloader 不做 RSA 验签，替换公钥后只需重新编译 App。</p>
 
   <h3>4.5 生成 .dtufw 固件包</h3>
+  <pre><code>./pack-firmware.sh                 # 版本取 OTA_FW_VERSION，默认 dev 私钥
+./pack-firmware.sh --version 0.2.0 --key prod_private.pem</code></pre>
+  <p class="small">脚本会检查签名私钥与 <code>User/ota_pubkey.h</code> 内嵌公钥是否一致（网络 OTA 必须一致），并自动用同名 <code>*_public.der</code> 做打包后验签自检。等价命令：</p>
   <pre><code>python3 tools/mkfw.py --hex obj/dtu-ethernet-ble-demo.hex \
     --version 0.2.0 --hw-id 1 \
     --key tools/keys/dev_private.pem \
@@ -661,6 +668,13 @@ frame = ota_notify("https://fw.example.com/dtu/dtu-0.2.0.dtufw", 152064, 0x00020
   <pre><code># 工具链
 export MRS_BIN="/Applications/MounRiver Studio 3.app/Contents/Resources/app/resources/darwin/components/WCH/Toolchain/RISC-V Embedded GCC/bin"
 export PATH="$MRS_BIN:$PATH"
+
+# 脚本（自动定位工具链；MRS_BIN/PATH 可省略）
+./build-all.sh                     # Boot + App + 合并 + 打包
+./build-bootloader.sh              # 仅 Bootloader
+./build-app.sh                     # 仅 App
+./merge-image.sh                   # build/dtu-full.hex
+./pack-firmware.sh --version 0.2.0 --key tools/keys/dev_private.pem
 
 # 编译
 make -C Bootloader                 # Bootloader + 12 KB 检查
