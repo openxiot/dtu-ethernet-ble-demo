@@ -181,23 +181,16 @@ jobs:
         shell: bash
         run: rm -f "$RUNNER_TEMP/fw_private.pem" "$RUNNER_TEMP/fw_public.der"
 
-      - name: 上传升级固件（.dtufw）
+      - name: 上传构建产物
         uses: actions/upload-artifact@v7
         with:
           name: dtu-firmware-${{ steps.version.outputs.value }}
           if-no-files-found: error
           path: |
             build/dtu-${{ steps.version.outputs.value }}.dtufw
+            build/dtu-full.hex
             build/app/dtu-ethernet-ble-demo.hex
             build/app/dtu-ethernet-ble-demo.elf
-
-      - name: 上传首次烧写镜像（dtu-full.hex）
-        uses: actions/upload-artifact@v7
-        with:
-          name: dtu-full-${{ steps.version.outputs.value }}
-          if-no-files-found: error
-          path: |
-            build/dtu-full.hex
             Bootloader/build/bootloader.hex
 
       - name: 创建 GitHub Release
