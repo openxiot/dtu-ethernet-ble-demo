@@ -22,7 +22,7 @@ ARCH     := -march=rv32imacxw -mabi=ilp32 -msmall-data-limit=8 -msave-restore
 CFLAGS   := $(ARCH) -Os -fsigned-char -ffunction-sections -fdata-sections \
             -fno-common -g -std=gnu99 -Wall \
             -I. -I../User -I../Core -I../Peripheral/inc -I../Debug
-ASFLAGS  := $(ARCH) -x assembler-with-cpp
+ASFLAGS  := $(ARCH) -x assembler-with-cpp -DBOOTLOADER
 LDFLAGS  := $(ARCH) -T $(LDSCRIPT) -nostartfiles -Xlinker --gc-sections \
             -Wl,-Map=$(MAP) --specs=nano.specs --specs=nosys.specs
 

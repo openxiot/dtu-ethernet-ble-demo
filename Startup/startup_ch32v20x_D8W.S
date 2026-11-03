@@ -260,7 +260,14 @@ handle_reset:
 	li t0, 0x3
 	csrw 0x804, t0
 /* Enable global interrupt and configure privileged mode */
-   	li t0, 0x88           
+#ifdef BOOTLOADER
+/* Bootloader 必须留在 M 模式：它用函数调用跳到 App 的 handle_reset，
+ * 而 handle_reset 要写 csr 0xbc0 / mtvec 等 M 模式寄存器。
+ * 若像 App 一样 mret 到 U 模式（MPP=0），App 会以非法指令异常死机。 */
+	li t0, 0x1880          /* MPIE=1, MPP=3(M) */
+#else
+   	li t0, 0x88
+#endif
    	csrw mstatus, t0
 /* Configure the interrupt vector table recognition mode and entry address mode */
  	la t0, _vector_base
