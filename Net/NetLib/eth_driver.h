@@ -48,7 +48,11 @@
 }while(0)
 
 /* definition for Ethernet frame */
-#define ETH_MAX_PACKET_SIZE    1536    /* ETH_HEADER + VLAN_TAG + MAX_ETH_PAYLOAD + ETH_CRC */
+/* 由 1536 降到 768：WCHNET_TCP_MSS=536，本机收发帧最大约 590B（536+40+14），
+ * WCHNET 自身的数据池 WCHNET_SIZE_POOL_BUF 也只有 594B，超过的帧本来就处理不了。
+ * MAC 会把超过该值的帧丢弃（R16_ETH_MAMXFL），不会写越界。
+ * MACRxBuf(2×768) + MACTxBuf(768) + WCHNET 堆共省约 3KB SRAM，给 mbedTLS 握手用。 */
+#define ETH_MAX_PACKET_SIZE    768     /* ETH_HEADER + VLAN_TAG + payload + ETH_CRC */
 #define ETH_HEADER               14    /* 6 byte Dest addr, 6 byte Src addr, 2 byte length/type */
 #define ETH_CRC                   4    /* Ethernet CRC */
 #define ETH_EXTRA                 2    /* Extra bytes in some cases */

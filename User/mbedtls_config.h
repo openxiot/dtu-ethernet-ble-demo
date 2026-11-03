@@ -33,7 +33,9 @@
 
 #define MBEDTLS_SSL_MAX_CONTENT_LEN     4096
 #define MBEDTLS_SSL_IN_CONTENT_LEN      4096
-#define MBEDTLS_SSL_OUT_CONTENT_LEN     512
+/* 发送侧只发 ClientHello/ClientKeyExchange/Finished 和很小的 WS 帧；
+ * 超过该长度的 mbedtls_ssl_write 会自动分片，ws_client 的写循环已处理短写。 */
+#define MBEDTLS_SSL_OUT_CONTENT_LEN     256
 
 /* 只用一个密码套件（TLS1.2 + ECDHE_RSA + AES-128-GCM + SHA256） */
 #define MBEDTLS_SSL_CIPHERSUITES \
@@ -79,5 +81,10 @@
 #define MBEDTLS_ECP_FIXED_POINT_OPTIM       0
 #define MBEDTLS_ECP_NIST_OPTIM
 #define MBEDTLS_MPI_MAX_SIZE                256   /* RSA-2048 模数 */
+
+/* 指数运算窗口由默认 2 降到 1：省掉 W[] 表里两个 256B 的 MPI（约 500B 峰值）。
+ * 这里只做 RSA 公钥运算，指数固定为 65537（0x10001，仅两个 1 bit），
+ * 窗口 1 与 2 的速度差异可以忽略。 */
+#define MBEDTLS_MPI_WINDOW_SIZE             1
 
 #endif /* MBEDTLS_CONFIG_H_LOCAL */
