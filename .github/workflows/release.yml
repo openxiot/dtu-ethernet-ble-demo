@@ -38,7 +38,7 @@ jobs:
 
     steps:
       - name: 检出代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: 校验 tag 并解析版本
         id: version
@@ -75,7 +75,7 @@ jobs:
 
       - name: 缓存 MounRiver 工具链
         id: cache-toolchain
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ env.MRS_TOOLCHAIN_DIR }}
           key: mrs-toolchain-1.92-linux-x64
@@ -181,16 +181,23 @@ jobs:
         shell: bash
         run: rm -f "$RUNNER_TEMP/fw_private.pem" "$RUNNER_TEMP/fw_public.der"
 
-      - name: 上传构建产物
-        uses: actions/upload-artifact@v4
+      - name: 上传升级固件（.dtufw）
+        uses: actions/upload-artifact@v7
         with:
           name: dtu-firmware-${{ steps.version.outputs.value }}
           if-no-files-found: error
           path: |
             build/dtu-${{ steps.version.outputs.value }}.dtufw
-            build/dtu-full.hex
             build/app/dtu-ethernet-ble-demo.hex
             build/app/dtu-ethernet-ble-demo.elf
+
+      - name: 上传首次烧写镜像（dtu-full.hex）
+        uses: actions/upload-artifact@v7
+        with:
+          name: dtu-full-${{ steps.version.outputs.value }}
+          if-no-files-found: error
+          path: |
+            build/dtu-full.hex
             Bootloader/build/bootloader.hex
 
       - name: 创建 GitHub Release
