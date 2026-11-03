@@ -12,8 +12,8 @@
 #define OTA_HW_ID               0x00000001u
 
 /* 当前固件版本（用于版本上报与降级判断）。 */
-#define OTA_FW_VERSION          OTA_MAKE_VERSION(0, 1, 0)
-#define OTA_BL_VERSION          OTA_MAKE_VERSION(0, 1, 0)
+#define OTA_FW_VERSION          OTA_MAKE_VERSION(0, 1, 1)
+#define OTA_BL_VERSION          OTA_MAKE_VERSION(0, 1, 1)
 
 /* 串口 IAP */
 #define OTA_UART_BAUD           115200u
