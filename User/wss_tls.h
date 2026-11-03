@@ -21,6 +21,10 @@
 /* 初始化 TLS 上下文 */
 void wss_tls_init(void);
 
+/* 设置 SNI/Host 名；NULL 表示不发 SNI（OTA 目标为 IPv4 时使用）。
+ * 必须在 wss_tls_handshake() 首次调用前设置；默认值为 DTU_HOST。 */
+void wss_tls_set_hostname(const char *host);
+
 /* 在 TCP 之上完成 TLS 握手（合作式、非阻塞，需在主循环反复调用直至结束）。
  * 返回：0=握手完成(可收发)；1=仍在进行，请稍后再次调用；<0=握手失败。 */
 int  wss_tls_handshake(void);

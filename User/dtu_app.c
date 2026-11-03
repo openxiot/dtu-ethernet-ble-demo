@@ -15,6 +15,9 @@
 #include "transport_eth.h"
 #include "wss_tls.h"
 #include "ws_client.h"
+#include "ota_app.h"
+#include "ota_config.h"
+#include "ota_layout.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -68,6 +71,24 @@ static void on_ws_bin(ws_client_t *ws, const uint8_t *data, uint32_t len)
     for (i = 0; i < len; i++) printf("%02x ", data[i]);
     printf("\r\n");
 
+    /* OTA 通知："DTUO" 开头的 TLV */
+    if (len >= 4 && data[0] == 0x44 && data[1] == 0x54 &&
+        data[2] == 0x55 && data[3] == 0x4F) {
+        int rc = ota_app_on_notify(data, len);
+
+        if (rc == OTA_ST_OK) {
+            /* 只置状态并回复，关闭 WS 留到回调返回后的下一轮 */
+            if (ws_send_text(ws, "ota=starting") == 0)
+                printf("[send] ota=starting\r\n");
+        } else {
+            char msg[32];
+            snprintf(msg, sizeof(msg), "ota=failed;code=%d", rc);
+            if (ws_send_text(ws, msg) == 0)
+                printf("[send] %s\r\n", msg);
+        }
+        return;
+    }
+
     /* 无 485：不论请求内容，一律回固定数据帧（模拟从设备应答） */
     if (ws_send_bin(ws, g_demo_reply, sizeof(g_demo_reply)) == 0) {
         printf("[send] demo reply %u bytes: ", (unsigned)sizeof(g_demo_reply));
@@ -87,6 +108,30 @@ static void on_ws_close(ws_client_t *ws, uint16_t code)
         transport_eth_reconnect_delay(60000);
     } else {
         transport_eth_reconnect();   /* 服务端关闭 -> 让传输层重连 */
+    }
+}
+
+/* 连接建立后上报一次升级结果 / 失败原因 */
+static void report_ota_status(void)
+{
+    char buf[64];
+    uint32_t v = ota_app_version();
+    int code = ota_app_take_failure();
+
+    if (ota_app_report_pending()) {
+        snprintf(buf, sizeof(buf), "fw=%lu.%lu.%lu;hw=%08lX;ota=done",
+                 (unsigned long)((v >> 16) & 0xFF),
+                 (unsigned long)((v >> 8) & 0xFF),
+                 (unsigned long)(v & 0xFF),
+                 (unsigned long)OTA_HW_ID);
+        if (ws_send_text(&g_ws, buf) == 0) {
+            printf("[send] %s\r\n", buf);
+            ota_app_report_done();
+        }
+    } else if (code >= 0) {
+        snprintf(buf, sizeof(buf), "ota=failed;code=%d", code);
+        if (ws_send_text(&g_ws, buf) == 0)
+            printf("[send] %s\r\n", buf);
     }
 }
 
@@ -164,6 +209,20 @@ void dtu_app_poll(void)
 {
     uint32_t now = (uint32_t)g_sys_ms;
 
+    /* OTA 独占单 socket：下载期间暂停 WS 状态机 */
+    if (ota_app_busy()) {
+        ota_app_poll();
+        return;
+    }
+    if (ota_app_pending()) {
+        printf("[ota] close WS, start HTTPS download\r\n");
+        ws_client_close(&g_ws);
+        wss_tls_close();
+        g_st = ST_DOWN;
+        ota_app_begin();
+        return;
+    }
+
     if (!transport_is_online()) {
         if (g_st != ST_DOWN) {
             g_st = ST_DOWN;
@@ -208,6 +267,7 @@ void dtu_app_poll(void)
             /* 连接建立后立即发一次心跳：服务端可能靠首帧把会话绑定到设备 */
             send_heartbeat();
             g_last_csq = g_last_loc = now;
+            report_ota_status();
         } else if (hr < 0) {
             printf("WS handshake fail\r\n");
             wss_tls_close();

@@ -2,7 +2,7 @@
 
 基于 **CH32V208WBU6** 的 DTU 演示固件：设备上电后经**以太网**以 **WebSocket (wss)** 连接云平台接入服务（仿真 `yed-s710ym` 机型）。**本板无 485**，收到服务端任意请求帧即回一个**固定数据帧**（模拟从设备应答）。
 
-- MCU：CH32V208WBU6（RISC-V，160K Flash / 32K SRAM，68 脚）
+- MCU：CH32V208WBU6（RISC-V，480K CodeFlash〔前 160K 零等待〕/ 32K SRAM，68 脚）
 - 网络：板载 10/100M 以太网（以太网要求系统时钟 60/120MHz，本工程用 120MHz）
 - 外设：**无 485**；BLE（CH32V208 自带）、UART1(PA9) 调试口
 - 协议：wss 连接 `ws.dtu.ap.openxiot.cn/v1/yinerda/yed-s710ym/{IMEI}`
@@ -20,6 +20,7 @@
 | 数据上报 | 周期上报信号强度 `csq=`、定位 `coordinates=经度,纬度` |
 | 固定帧应答（无 485） | 收到服务端**任意**请求帧 → 回固定数据帧（`dtu_config.h` 的 `DTU_DEMO_REPLY_FRAME`） |
 | 断线重连 | TCP/链接断开后指数退避自动重连 |
+| 固件升级 | Bootloader + 分区布局；USART1 串口 IAP；网络 OTA（WS 通知触发、HTTPS 下载、CRC/SHA-256/RSA-2048 校验） |
 | 仿真 | 地理位置、信号强度、IMEI 先用随机数/模拟值，集中在配置头便于修改 |
 
 ---
@@ -36,6 +37,18 @@ User/                    应用层（可改）
   wss_tls.c/h            TLS 适配层（wss 唯一需接入的外部组件）
   ws_client.c/h          WebSocket 客户端（握手/分帧/掩码/ping-pong/close）
   ws_security.c/h        SHA-1 + base64（握手 Sec-WebSocket-Accept 校验）
+  ota_*.c/h              OTA：分区/元数据/固件包/串口/HTTPS/应用状态机
+Bootloader/              独立 Bootloader 工程（Makefile 构建）
+  boot_main.c            启动决策与 App 跳转
+  boot_iap.c             串口 IAP 协议
+  boot_flash.c/.h        Flash 擦写与 Staging→App 搬运
+  boot_uart.c/.h         USART1 逐字节收发（PA9/PA10）
+  Link_boot.ld           0x0 起 12 KB
+tools/                   打包与升级工具（Python 3）
+  mkfw.py                生成 .dtufw 固件包
+  merge_hex.py           合并 Boot + App，供产线烧录
+  ota_uart.py            串口 IAP 主机端
+  keys/                  开发用密钥（私钥被 .gitignore 忽略）
 Net/                     以太网协议栈（已拷入 WCH 官方 NetLib）
   NetLib/                wchnet.h / libwchnet.a / eth_driver.c / eth_driver.h
   net_config.h           协议栈配置（TCP 数量、MSS、缓冲等）
@@ -72,9 +85,15 @@ doc/说明.md              板卡说明、WCH-LINK 接线
 
 ## 四、构建与烧录
 
-1. **工具**：MounRiverStudio（WCH 官方 IDE，内置 RISC-V 工具链）。
-2. **打开工程**：打开本工程目录（`.cproject`/`.project` 已配置好源文件、头文件路径与 `libwchnet.a` 链接，无需手动加）。
-3. **构建**：`Project → Clean` 后 `Build`。产物 `obj/dtu-ethernet-ble.hex`。
+完整步骤（环境变量、命令行构建、合并烧录、首次上电注意事项）见
+[`how-to-build-flash.md`](how-to-build-flash.md)；网页版见
+[`how-to-build-flash.html`](how-to-build-flash.html)。
+
+1. **工具**：MounRiver Studio 3（WCH 官方 IDE，内置 RISC-V 工具链）。
+2. **打开工程**：`File → Open Folder…` 选本仓库根目录（或命令面板执行 `Open MRS Project`）。
+   `.cproject`/`.project` 已配好源文件、头文件路径与 `libwchnet.a` 链接。
+3. **构建**：右键工程 → `Build Project`（或 `ReBuild Project`）。`obj/` 不入库，由 MRS 自动生成，
+   产物 `obj/dtu-ethernet-ble-demo.hex`。`Bootloader/` 已在工程中排除，不会混入 App 构建。
 4. **烧录接线（WCH-Link）**：
 
    | WCH-LINK | 板子 |
@@ -87,9 +106,110 @@ doc/说明.md              板卡说明、WCH-LINK 接线
 
 5. **串口**：UART1(PA9) 115200 查看日志（连接/上报/心跳/查询应答）。
 
+> App 链接在 `0x3000`，**不能直接烧到 0x0**。量产请先合并 Bootloader（见 5.4），
+> 或先烧 Bootloader 再用串口 IAP 写入 App 包。
+
 ---
 
-## 五、wss 的 TLS（mbedTLS）
+## 五、固件升级（OTA）
+
+完整方案（分区规划、启动决策、串口协议、网络 OTA 时序）见
+[`how-to-upgrade-firmware.html`](how-to-upgrade-firmware.html)；
+动手操作（编译、烧写、打包、串口/网络升级、故障排查）见
+[`how-to-build-flash.md`](how-to-build-flash.md)
+（网页版 [`how-to-build-flash.html`](how-to-build-flash.html)）。
+
+### 5.1 Flash 分区（已冻结）
+
+| 分区 | 地址 | 大小 | 用途 |
+|---|---|---|---|
+| Bootloader | `0x00000–0x02FFF` | 12 KB | 启动决策、串口 IAP、Staging→App 搬运 |
+| App | `0x03000–0x27FFF` | 148 KB | 应用镜像（`Ld/Link.ld`） |
+| Meta | `0x28000–0x29FFF` | 8 KB | OTA 状态记录，两页轮换 |
+| Staging | `0x2A000–0x51FFF` | 160 KB | 接收的固件包（含 512 B 包头） |
+| Backup | `0x52000–0x77FFF` | 152 KB | 预留，本期未使用 |
+
+分区常量在 `User/ota_layout.h`；改布局必须同时改 `Ld/Link.ld`、`Bootloader/Link_boot.ld`。
+
+### 5.2 构建 Bootloader
+
+将 MounRiver 工具链加入 `PATH`（安装目录下
+`.../WCH/Toolchain/RISC-V Embedded GCC/bin`），然后：
+
+```sh
+make -C Bootloader
+```
+
+产物 `Bootloader/build/bootloader.{hex,bin,elf}`；Makefile 带 size gate，超过 12 KB 直接失败。
+App 仍用 MounRiver IDE 构建（新增的 `User/ota_*.c` 位于工程源目录中，自动参与编译）。
+
+### 5.3 生成固件包
+
+先用 `User/ota_config.h` 的 `OTA_FW_VERSION` 定义新版本并重新编译，再打包：
+
+```sh
+python3 tools/mkfw.py --hex obj/dtu-ethernet-ble-demo.hex \
+    --version 0.2.0 --key tools/keys/dev_private.pem \
+    --pub tools/keys/dev_public.der -o build/dtu-0.2.0.dtufw
+```
+
+包结构：512 B 包头（`DTUFW` 魔数、文件/镜像大小、CRC32、版本、hw_id、SHA-256、RSA-2048 签名）
++ 256 B 对齐镜像。签名对象为 `SHA-256(header[0x000..0x040) || image)`。
+`--version` 必须与编译进固件的 `OTA_FW_VERSION` 一致（不一致时工具告警）；
+镜像超过 148 KB 直接失败。
+
+> 仓库只带开发公钥（`User/ota_pubkey.h`）。私钥 `tools/keys/*.pem` 已被 `.gitignore`
+> 忽略；量产前必须替换为生产密钥对，并另行保管私钥。
+
+### 5.4 产线合并烧录
+
+```sh
+python3 tools/merge_hex.py Bootloader/build/bootloader.hex \
+    obj/dtu-ethernet-ble-demo.hex -o build/dtu-full.hex
+```
+
+工具校验 Boot < `0x3000`、App 在 `0x3000..0x27FFF` 后合并，用 WCH-Link 一次烧录。
+
+> **首次上电**：合并 hex 不含 Meta 区，首次启动 Meta 为 EMPTY，Bootloader 会**无限等待
+> 串口升级**，不会自行进入 App。产线烧录后需用 `ota_uart.py` 走一次串口升级
+> （升级流程会写入 Meta），或由产测工具写入 APP_VALID 记录。
+
+### 5.5 串口升级（USART1，115200）
+
+```sh
+python3 tools/ota_uart.py /dev/tty.usbserial-XXXX build/dtu-0.2.0.dtufw
+```
+
+工具持续发送 HELLO，请在启动工具后复位设备（App 侧置 BOOT_UART 后复位亦可）。
+帧格式 `A5 5A` + CRC16/CCITT-FALSE，256 B 分页逐页 ACK；END 后 Bootloader 校验整包
+CRC32/SHA-256、搬运、校验 App、跳转（Bootloader 不验 RSA，串口升级只保证完整性）。
+RECOVERY/EMPTY 状态下无限等待，随时可重试。
+
+### 5.6 网络 OTA
+
+前提：设备只有 **一个 TCP socket**。收到 WS 二进制通知（`DTUO` TLV：文件大小、版本、
+HTTPS URL、CRC16）后，App 断开 WS/TLS，复用 socket 连接固件服务器，HTTPS GET 下载到
+Staging，校验 CRC32/SHA-256 与 RSA 签名，写 Meta=STAGED 后复位；Bootloader 搬运并
+启动新固件。下次 WS 连接建立时上报 `ota=done` 或 `ota=failed;code=N`。
+
+评审确认的约束：
+
+- 下载只允许 `https://`（URL 解析拒绝明文 http）；
+- 固件 URL 不做域名白名单校验；
+- TLS 不校验服务器证书（`MBEDTLS_SSL_VERIFY_NONE`），固件完整性由包签名保证；
+- 默认拒绝降级，通知/包带 allow-downgrade 位时除外；
+- `Content-Length` 必须等于通知中的文件大小，不支持 chunked/Range/302。
+
+### 5.7 升级状态与恢复
+
+- 新固件启动后 30 s 内未确认，尝试计数 +1；累计 5 次未确认后，下次启动进入 RECOVERY，
+  停在串口等待升级。
+- 搬运过程中掉电不影响 Staging：Meta 停在 COPYING，下次启动重新搬运并校验。
+- RECOVERY/EMPTY：无限等待串口 IAP。
+
+---
+
+## 六、wss 的 TLS（mbedTLS）
 
 WCHNET 仅提供 TCP、**不含 TLS**。`wss`(443) 需要 TLS。
 
@@ -112,7 +232,7 @@ WCHNET 仅提供 TCP、**不含 TLS**。`wss`(443) 需要 TLS。
 
 ---
 
-## 六、协议摘要（对齐服务端 DeviceYedS710YmProcessor）
+## 七、协议摘要（对齐服务端 DeviceYedS710YmProcessor）
 
 - 地址：`wss(s)://host/v1/{org}/{model}/{IMEI}`，`org=yinerda`、`model=yed-s710ym`
 - 心跳（二进制，每 20s）：`0a 0b 0c 0d 0e 0f`
@@ -123,6 +243,6 @@ WCHNET 仅提供 TCP、**不含 TLS**。`wss`(443) 需要 TLS。
 
 ---
 
-## 七、许可证
+## 八、许可证
 
 见根目录 `LICENSE`（本项目基于 WCH CH32V20x 官方库扩展）。

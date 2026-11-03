@@ -1,0 +1,708 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CH32V208 DTU 编译、烧写与升级手册</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --panel:#ffffff; --ink:#1b1f24; --muted:#5b6672;
+    --line:#dfe3e8; --brand:#1f5fbf; --brand-soft:#eaf1fb;
+    --ok:#1f7a4d; --ok-soft:#e8f5ee;
+    --warn:#9a6200; --warn-soft:#fff4de;
+    --risk:#a52a2a; --risk-soft:#fdecec;
+    --code-bg:#0f172a; --code-ink:#e6edf7;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.7;font-size:15px}
+  a{color:var(--brand);text-decoration:none}
+  a:hover{text-decoration:underline}
+  code{font-family:var(--mono);font-size:.92em;background:#eef1f5;padding:.12em .35em;border-radius:4px;overflow-wrap:anywhere}
+  pre{font-family:var(--mono);background:var(--code-bg);color:var(--code-ink);padding:16px 18px;border-radius:10px;overflow:auto;font-size:13px;line-height:1.55}
+  pre code{background:none;color:inherit;padding:0;font-size:inherit}
+  .hero{background:linear-gradient(135deg,#12263f 0%,#1f4f8f 55%,#2b6cb0 100%);color:#fff;padding:44px 28px 38px}
+  .hero-inner{max-width:1200px;margin:0 auto}
+  .eyebrow{font-size:12px;letter-spacing:.18em;text-transform:uppercase;opacity:.75;margin:0 0 10px}
+  h1{margin:0 0 12px;font-size:30px;line-height:1.3;font-weight:700}
+  .sub{margin:0;max-width:900px;color:#dbe7f6;font-size:15px}
+  .badges{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px}
+  .badge{display:inline-block;padding:4px 11px;border-radius:999px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.25);font-size:12px}
+  .layout{max-width:1200px;margin:0 auto;padding:28px;display:grid;grid-template-columns:250px minmax(0,1fr);gap:32px}
+  nav.toc{position:sticky;top:18px;align-self:start;max-height:calc(100vh - 36px);overflow:auto;font-size:13px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  nav.toc h2{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+  nav.toc ol{margin:0;padding-left:18px}
+  nav.toc li{margin:6px 0}
+  nav.toc a{color:#33404d}
+  main{min-width:0}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:26px 28px;margin:0 0 22px}
+  section h2{margin:0 0 16px;font-size:21px;line-height:1.35;border-bottom:1px solid var(--line);padding-bottom:10px}
+  section h3{margin:26px 0 10px;font-size:16.5px}
+  section h4{margin:18px 0 8px;font-size:14.5px}
+  p{margin:9px 0}
+  ul,ol{margin:9px 0;padding-left:22px}
+  li{margin:5px 0}
+  table{border-collapse:collapse;width:100%;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:#f1f4f8;font-weight:600;white-space:nowrap}
+  tr:nth-child(even) td{background:#fafbfc}
+  .table-wrap{overflow-x:auto;margin:12px 0}
+  .table-wrap table{margin:0;min-width:620px}
+  .callout{border-left:4px solid var(--brand);background:var(--brand-soft);padding:12px 16px;border-radius:0 8px 8px 0;margin:14px 0}
+  .callout.ok{border-color:var(--ok);background:var(--ok-soft)}
+  .callout.warn{border-color:var(--warn);background:var(--warn-soft)}
+  .callout.risk{border-color:var(--risk);background:var(--risk-soft)}
+  .callout strong{display:block;margin-bottom:3px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .card{border:1px solid var(--line);border-radius:10px;padding:14px 16px;background:#fcfcfd}
+  .card h4{margin:0 0 6px;font-size:14px}
+  .card p{margin:4px 0;font-size:13.5px;color:#39434d}
+  .kbd{font-family:var(--mono);font-size:12px;background:#eef1f5;border:1px solid #d6dbe2;border-bottom-width:2px;border-radius:4px;padding:1px 5px}
+  .flow{background:#0f172a;color:#dbe8f7;border-radius:10px;padding:16px 18px;font-family:var(--mono);font-size:13px;line-height:1.65;overflow:auto;white-space:pre}
+  .tag{display:inline-block;padding:1px 7px;border-radius:4px;font-size:11.5px;font-weight:600;vertical-align:middle}
+  .tag.must{background:#fdecec;color:#a52a2a}
+  .tag.rec{background:#e8f5ee;color:#1f7a4d}
+  .tag.opt{background:#fff4de;color:#9a6200}
+  .tag.todo{background:#eaf1fb;color:#1f5fbf}
+  .small{font-size:12.5px;color:var(--muted)}
+  .mono{font-family:var(--mono)}
+  .nowrap{white-space:nowrap}
+  details{border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin:10px 0;background:#fcfcfd}
+  summary{cursor:pointer;font-weight:600}
+  footer{max-width:1200px;margin:0 auto;padding:8px 28px 40px;color:var(--muted);font-size:12.5px}
+  @media (max-width: 960px){
+    .layout{grid-template-columns:1fr;padding:18px}
+    nav.toc{position:static;max-height:none}
+    .grid2{grid-template-columns:1fr}
+    section{padding:20px 18px}
+    h1{font-size:24px}
+  }
+  @media print{
+    body{background:#fff}
+    .hero{background:#12263f !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    nav.toc{display:none}
+    .layout{display:block;padding:0}
+    section{break-inside:avoid;border:none;padding:0 0 18px;margin:0 0 18px}
+    a{color:inherit;text-decoration:none}
+  }
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Build &amp; Flash Guide · CH32V208 DTU</p>
+    <h1>编译、烧写与固件升级手册</h1>
+    <p class="sub">回答两个问题：<b>第一次烧写烧什么、有哪几种方式、每种怎么烧</b>；<b>后续升级烧什么、有哪几种方式、每种怎么烧</b>。同时给出工具链、编译、打包、接线、串口 IAP、网络 OTA、启动恢复与故障排查的完整命令。工程：dtu-ethernet-ble-demo（Bootloader + App 双工程）。</p>
+    <div class="badges">
+      <span class="badge">芯片：CH32V208WBU6</span>
+      <span class="badge">Flash：480 KB（前 160 KB 零等待）</span>
+      <span class="badge">Bootloader 0.1.0 / App 0.1.0</span>
+      <span class="badge">分区布局 v0.4</span>
+      <span class="badge">工具链：MounRiver Studio 3</span>
+      <span class="badge">日期：2026-11-03</span>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+<nav class="toc">
+  <h2>目录</h2>
+  <ol>
+    <li><a href="#summary">结论先行</a></li>
+    <li><a href="#artifacts">烧写对象</a></li>
+    <li><a href="#first">初次烧写</a></li>
+    <li><a href="#later">后续烧写</a></li>
+    <li><a href="#build">环境与编译</a></li>
+    <li><a href="#wiring">接线与下载配置</a></li>
+    <li><a href="#serial">串口升级细节</a></li>
+    <li><a href="#network">网络 OTA 细节</a></li>
+    <li><a href="#boot">启动决策与恢复</a></li>
+    <li><a href="#trouble">故障排查</a></li>
+    <li><a href="#cheatsheet">命令速查</a></li>
+    <li><a href="#layout">附录：Flash 分区</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<section id="summary">
+  <h2>0. 结论先行</h2>
+
+  <div class="grid2">
+    <div class="card">
+      <h4>第一次烧写（空片 / 新板）</h4>
+      <p><b>烧什么：</b><code>build/dtu-full.hex</code>（Bootloader + App，<b>不含 Meta</b>），或只烧 <code>bootloader.hex</code>。</p>
+      <p><b>怎么烧：</b>MRS GUI <span class="tag rec">推荐</span> / OpenOCD 命令行 / 只烧 Boot + 串口 IAP / WCH-LinkUtility。</p>
+      <p><b>关键：</b>烧完 Meta 仍是 EMPTY，必须再用 <code>.dtufw</code> 走一次串口 IAP，设备才会进 App。</p>
+    </div>
+    <div class="card">
+      <h4>后续烧写（已有 Bootloader）</h4>
+      <p><b>烧什么：</b>只用 <code>build/dtu-&lt;ver&gt;.dtufw</code>，不再烧合并 hex。</p>
+      <p><b>怎么烧：</b>网络 OTA <span class="tag rec">量产推荐</span> / 串口 IAP <span class="tag rec">现场推荐</span>；SWD 只烧 App 仅供开发调试。</p>
+      <p><b>关键：</b>整包由 Bootloader 搬运；SWD 直接烧 App 会绕过版本与签名校验。</p>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+  <table>
+    <tr><th>场景</th><th>烧什么</th><th>方式</th></tr>
+    <tr><td>全新板 / 空片首次安装</td><td><code>build/dtu-full.hex</code> + 一次 <code>.dtufw</code></td><td>A MRS GUI（或 B OpenOCD）→ 串口 IAP</td></tr>
+    <tr><td>产线批量首次安装</td><td><code>bootloader.hex</code> + <code>.dtufw</code></td><td>C 只烧 Boot → 串口 IAP</td></tr>
+    <tr><td>现网设备升级</td><td><code>.dtufw</code>（服务器）</td><td>A 网络 OTA</td></tr>
+    <tr><td>现场无网络 / 救砖</td><td><code>.dtufw</code></td><td>B 串口 IAP</td></tr>
+    <tr><td>开发调试改 App</td><td><code>obj/dtu-ethernet-ble-demo.hex</code></td><td>C SWD 只烧 App（<code>Erase All=false</code>）</td></tr>
+    <tr><td>修复 / 升级 Bootloader</td><td><code>bootloader.hex</code></td><td>D SWD 只烧 Boot（<code>Erase All=false</code>）</td></tr>
+  </table>
+  </div>
+
+  <div class="callout warn">
+    <strong>最容易踩的坑</strong>
+    MRS 默认 <code>Erase All=true</code> 会整片擦除。只烧 App hex 时它会连 Bootloader（<code>0x0</code>）和 Meta（<code>0x28000</code>）一起擦掉，设备无法启动。
+  </div>
+</section>
+
+<section id="artifacts">
+  <h2>1. 烧写对象：四个文件别搞混</h2>
+
+  <div class="table-wrap">
+  <table>
+    <tr><th>文件</th><th>内容</th><th>用途</th></tr>
+    <tr><td><code>build/dtu-full.hex</code></td><td>Bootloader + App，<b>不含 Meta</b></td><td>初次烧写：SWD 一次写入</td></tr>
+    <tr><td><code>Bootloader/build/bootloader.hex</code></td><td>仅 Bootloader（<code>0x0–0x2FFF</code>）</td><td>只安装 / 修复 Bootloader</td></tr>
+    <tr><td><code>obj/dtu-ethernet-ble-demo.hex</code></td><td>仅 App（<code>0x3000</code> 起）</td><td>开发调试时 SWD 直接烧 App</td></tr>
+    <tr><td><code>build/dtu-&lt;ver&gt;.dtufw</code></td><td>512 B 包头 + App 镜像 + RSA 签名</td><td>串口 IAP / 网络 OTA 的<b>唯一升级对象</b></td></tr>
+  </table>
+  </div>
+
+  <div class="callout">
+    <strong>hex 不是升级包，.dtufw 才是</strong>
+    hex 只用于 SWD 烧写；串口和网络升级都只认 <code>.dtufw</code>。合并 hex 不包含 Meta、Staging、Backup 区。
+  </div>
+
+  <p>记住两条原则：</p>
+  <ul>
+    <li><b>初次烧写</b>：先用 SWD 写入 <code>dtu-full.hex</code>（或只写 <code>bootloader.hex</code>），再用 <code>.dtufw</code> 走一次串口 IAP，写入 App 与 Meta。</li>
+    <li><b>后续烧写</b>：只用 <code>.dtufw</code>，优先网络 OTA，其次串口 IAP；不要再用 SWD 烧合并 hex，更不要整片擦除。</li>
+  </ul>
+</section>
+
+<section id="first">
+  <h2>2. 初次烧写（空片 / 新板 / 整片重装）</h2>
+
+  <p>目标：<code>0x0</code> 有 Bootloader、<code>0x3000</code> 有 App、<code>0x28000</code> 有 Meta 记录。共有四种方式：</p>
+
+  <div class="table-wrap">
+  <table>
+    <tr><th>方式</th><th>烧写对象</th><th>工具</th><th>写 Meta</th><th>适用场景</th></tr>
+    <tr><td>A. MRS GUI</td><td><code>build/dtu-full.hex</code></td><td>MRS 3 + WCH-Link</td><td>否</td><td>首次安装，<span class="tag rec">推荐</span></td></tr>
+    <tr><td>B. OpenOCD 命令行</td><td><code>build/dtu-full.hex</code></td><td>MRS 自带 OpenOCD</td><td>否</td><td>无 GUI、脚本化 / 批量</td></tr>
+    <tr><td>C. 只烧 Boot + 串口 IAP</td><td><code>bootloader.hex</code> → <code>.dtufw</code></td><td>WCH-Link + USB-TTL</td><td>是（IAP 写入）</td><td>产线、手里没有 App hex</td></tr>
+    <tr><td>D. WCH-LinkUtility</td><td><code>build/dtu-full.hex</code></td><td>需另装 WCH-LinkUtility</td><td>否</td><td>已装该工具时可选</td></tr>
+  </table>
+  </div>
+
+  <div class="callout risk">
+    <strong>先记住这个顺序</strong>
+    A / B / D 只写 Boot + App，Meta 仍是 EMPTY，烧完必须再走一次串口 IAP（方式 C 的第 4 步），否则 Bootloader 会无限等待、不会进 App。方式 C 本身就把 App 与 Meta 一起写入。
+  </div>
+
+  <h3>2.1 WCH-Link 接线</h3>
+  <div class="table-wrap">
+  <table>
+    <tr><th>WCH-LINK</th><th>板子</th></tr>
+    <tr><td>3V3</td><td>VDD</td></tr>
+    <tr><td>GND</td><td>GND</td></tr>
+    <tr><td>SWDIO</td><td>PA13</td></tr>
+    <tr><td>SWCLK</td><td>PA14</td></tr>
+    <tr><td>RST</td><td>RST（建议接，下载器需要复位芯片）</td></tr>
+  </table>
+  </div>
+  <p class="small">串口升级另需 USB-TTL：TX→PA10、RX→PA9、GND→GND，115200 8N1。</p>
+
+  <h3>2.2 方式 A：MRS GUI 烧合并 hex <span class="tag rec">推荐</span></h3>
+  <ol>
+    <li>生成合并 hex：
+      <pre><code>python3 tools/merge_hex.py Bootloader/build/bootloader.hex \
+    obj/dtu-ethernet-ble-demo.hex -o build/dtu-full.hex</code></pre>
+    </li>
+    <li>接好 WCH-Link，MRS 3 中右键工程 → <b>Download Configuration</b>：
+      <ul>
+        <li><code>Target Path = build/dtu-full.hex</code></li>
+        <li><code>Erase All = true</code>（整片擦除，适合空片 / 重装）</li>
+        <li><code>Program / Verify / Reset = true</code></li>
+      </ul>
+      这些设置保存在仓库根目录 <code>.template</code>（已被 git 跟踪）。
+    </li>
+    <li>点击 <b>Download</b> 烧写。</li>
+    <li>复位后首次启动：Meta 仍是 <code>EMPTY</code>，Bootloader 无限等待串口升级。按方式 C 的第 4 步用 <code>ota_uart.py</code> 刷一次 <code>.dtufw</code>，写入 App 与 Meta。</li>
+  </ol>
+
+  <h3>2.3 方式 B：OpenOCD 命令行烧合并 hex</h3>
+  <p>MRS 3 安装目录自带 OpenOCD（WCH <code>wlinke</code> 适配器），不打开 IDE 也能烧。macOS 路径：</p>
+  <pre><code>OC="/Applications/MounRiver Studio 3.app/Contents/Resources/app/resources/darwin/components/WCH/OpenOCD/OpenOCD/bin"</code></pre>
+  <p class="small">Windows / Linux 对应 <code>.../resources/app/resources/win32|linux/components/WCH/OpenOCD/OpenOCD/bin</code>。先做只读连接检查：</p>
+  <pre><code>"$OC/openocd" -f "$OC/wch-riscv.cfg" -c "init; halt; flash probe 0; exit"</code></pre>
+  <p>正常应看到 <code>Target successfully examined.</code>、<code>device id = 0x...</code>、<code>flash size = ...kbytes</code>。然后烧写并复位：</p>
+  <pre><code>"$OC/openocd" -f "$OC/wch-riscv.cfg" \
+    -c "init; halt; program build/dtu-full.hex verify reset; exit"</code></pre>
+  <p>等价于 MRS 里 <code>Target Path=build/dtu-full.hex</code> + <code>Program/Verify/Reset</code>，但 Meta 仍为 EMPTY，烧完同样要执行方式 C 的第 4 步。</p>
+
+  <div class="callout warn">
+    <strong>OpenOCD 的边界</strong>
+    <ul>
+      <li>flash bank 只有<b>前 160 KB</b>（<code>0x0–0x27FFF</code>）；合并 hex 写到约 <code>0x24xxx</code>，在范围内；Meta / Staging 在 <code>0x28000</code> 之后，<b>不能用 OpenOCD 写</b>。</li>
+      <li><code>program</code> 只擦除 hex 覆盖的扇区，不做 MRS 的 <code>Erase All</code>。</li>
+      <li>OpenOCD 不设置芯片 ROM/RAM 分配（128K+64K / 160K+32K 等）。新片或分配异常时，先在 MRS 里 <code>Download</code> 一次。</li>
+      <li>某些 WCH-Link 固件会打印 <code>The Chip type does not match</code>，甚至报告 <code>ROM 128 kbytes RAM 64 kbytes</code>。若同时能 <code>Target successfully examined</code> 且 flash 大小正确，可继续；否则先用 MRS / WCH-LinkUtility 确认芯片配置、更新 WCH-Link 固件。</li>
+    </ul>
+  </div>
+
+  <h3>2.4 方式 C：只烧 Bootloader，再用串口 IAP 装 App <span class="tag rec">产线推荐</span></h3>
+  <p>SWD 只写约 9 KB 的 Bootloader，App 与 Meta 都由串口 IAP 写入，适合产线批量。</p>
+  <ol>
+    <li>构建 Bootloader，得到 <code>Bootloader/build/bootloader.hex</code>（见第 4 节）。</li>
+    <li>MRS <b>Download Configuration</b>：
+      <ul>
+        <li><code>Target Path = Bootloader/build/bootloader.hex</code></li>
+        <li>空片：<code>Erase All = true</code>；已有 App/Meta、只想修 Boot：<code>Erase All = false</code></li>
+        <li><code>Program / Verify / Reset = true</code></li>
+      </ul>
+    </li>
+    <li><b>Download</b>。复位后 Meta 为 <code>EMPTY</code>，Bootloader 停在串口等待升级。</li>
+    <li>USB-TTL 接 PA9 / PA10 / GND，<b>先运行工具，再复位设备</b>：
+      <pre><code>python3 tools/ota_uart.py /dev/tty.usbserial-XXXX build/dtu-0.1.0.dtufw</code></pre>
+    </li>
+    <li>工具握手后发送整包；Bootloader 校验 CRC32/SHA-256，写 Meta=<code>STAGED</code>，搬运到 App，再校验后跳转。至此 <code>0x0</code>、<code>0x3000</code>、<code>0x28000</code> 都有内容。</li>
+  </ol>
+
+  <h3>2.5 方式 D：WCH-LinkUtility <span class="tag opt">可选</span></h3>
+  <p>如果机器上装了 WCH 官方的 WCH-LinkUtility（仓库不提供，需自行安装）：</p>
+  <ol>
+    <li>连接 WCH-Link，选择芯片系列 <code>CH32V208</code>；</li>
+    <li>打开 <code>build/dtu-full.hex</code>；</li>
+    <li>勾选 <code>Erase All</code>（空片 / 重装）、<code>Program</code>、<code>Verify</code>、<code>Reset</code>；</li>
+    <li>点击 <b>Program</b> 下载。</li>
+  </ol>
+  <p>同样只写 Boot + App，烧完 Meta 仍为 EMPTY，需要按方式 C 第 4 步走一次串口 IAP。不同版本工具界面可能略有差异，以实际界面为准。</p>
+
+  <h3>2.6 为什么初次烧完还要串口 IAP</h3>
+  <div class="flow">空片
+ │  SWD：dtu-full.hex（Boot + App）     或     SWD：bootloader.hex
+ ▼
+Meta = EMPTY  →  Bootloader 无限等待串口
+ │  USB-TTL：ota_uart.py  build/dtu-x.y.z.dtufw
+ ▼
+写 Meta = STAGED  →  搬运 Staging → App  →  校验  →  Meta = APP_VALID  →  跳转 App</div>
+  <p>合并 hex 不包含 Meta 区，也不包含 Staging / Backup。Bootloader 的判断完全依赖 Meta：<code>EMPTY</code> 时不会自行跳 App。串口 IAP 完成后写 <code>STAGED</code>，搬运成功再写 <code>APP_VALID</code>，设备才会正常启动。</p>
+  <p>如果产测工具能按 <code>ota_meta_t</code> 格式直接写入一条 <code>APP_VALID</code> 记录，也可以代替串口 IAP；否则串口 IAP 是最简单且能顺带验证升级链路的方式。</p>
+</section>
+
+<section id="later">
+  <h2>3. 后续烧写（已有 Bootloader 的板子）</h2>
+
+  <div class="callout">
+    <strong>原则：只升级 .dtufw</strong>
+    按现场条件选择网络 OTA 或串口 IAP。SWD 只用于开发调试或修复 Bootloader；不再整片烧合并 hex，也不要整片擦除。
+  </div>
+
+  <div class="table-wrap">
+  <table>
+    <tr><th>方式</th><th>烧写对象</th><th>校验</th><th>适用</th></tr>
+    <tr><td>A. 网络 OTA</td><td><code>.dtufw</code>（HTTPS 下载）</td><td>CRC32 + SHA-256 + RSA-2048</td><td>现网批量升级，<span class="tag rec">推荐</span></td></tr>
+    <tr><td>B. 串口 IAP</td><td><code>.dtufw</code>（本地串口）</td><td>CRC32 + SHA-256</td><td>现场 / 产线 / 救砖，<span class="tag rec">推荐</span></td></tr>
+    <tr><td>C. SWD 只烧 App</td><td><code>obj/dtu-ethernet-ble-demo.hex</code></td><td>无（绕过升级校验）</td><td>开发调试</td></tr>
+    <tr><td>D. SWD 更新 Bootloader</td><td><code>bootloader.hex</code></td><td>无</td><td>Boot 修复 / 升级，少见</td></tr>
+  </table>
+  </div>
+
+  <h3>3.1 方式 A：网络 OTA <span class="tag rec">量产推荐</span></h3>
+  <ul>
+    <li><b>烧哪个：</b>服务器上托管的 <code>.dtufw</code>。设备通过 HTTPS 下载到 Staging，再由 Bootloader 搬运到 App，<b>不需要 SWD，也不需要人到现场</b>。</li>
+    <li><b>怎么触发：</b>服务端在设备已连接的 WS 上发二进制 <code>DTUO</code> 通知（URL、大小、版本、CRC16）；设备回 <code>ota=starting</code>，断开 WS 后下载、验签、写 Meta、复位、搬运。</li>
+    <li><b>结果：</b>下次 WS 连接建立时设备上报 <code>fw=x.y.z;hw=XXXXXXXX;ota=done</code>，失败则 <code>ota=failed;code=N</code>。</li>
+    <li>完整 TLV 格式与服务器要求见 <a href="#network">第 7 节</a>。</li>
+  </ul>
+
+  <h3>3.2 方式 B：串口 IAP <span class="tag rec">现场 / 产线推荐</span></h3>
+  <ul>
+    <li><b>烧哪个：</b><code>build/dtu-&lt;ver&gt;.dtufw</code>（不是 hex）。</li>
+    <li><b>怎么烧：</b>USB-TTL 接 PA9 / PA10 / GND，<b>先运行工具，再复位设备</b>：
+      <pre><code>python3 tools/ota_uart.py /dev/tty.usbserial-XXXX build/dtu-0.2.0.dtufw</code></pre>
+    </li>
+    <li><b>进入条件：</b>Meta 为 <code>EMPTY</code> / <code>RECOVERY</code> 时无限等待；<code>BOOT_UART</code> 等 30 s；<code>APP_VALID</code> 每次启动只留 500 ms 窗口，所以顺序必须是“先开工具，再复位”。</li>
+    <li>默认拒绝降级；确需降级加 <code>--allow-downgrade</code>。协议和状态码见 <a href="#serial">第 6 节</a>。</li>
+  </ul>
+
+  <h3>3.3 方式 C：SWD 只烧 App <span class="tag opt">仅开发调试</span></h3>
+  <ol>
+    <li>MRS <b>Download Configuration</b>：
+      <ul>
+        <li><code>Target Path = obj/dtu-ethernet-ble-demo.hex</code></li>
+        <li><b><code>Erase All = false</code></b>（否则 Bootloader 与 Meta 被擦除）</li>
+        <li><code>Program / Verify / Reset = true</code></li>
+      </ul>
+    </li>
+    <li><b>Download</b>，复位。</li>
+  </ol>
+  <p>这条路径绕过版本检查、包 CRC / SHA 与 RSA 验签，只适合开发调试。App 启动 30 s 后会把 Meta 的版本更新为实际运行版本；若新 App 起不来，累计 5 次后进入 <code>RECOVERY</code>。</p>
+
+  <h3>3.4 方式 D：SWD 更新 Bootloader <span class="tag opt">少见</span></h3>
+  <ul>
+    <li><code>Target Path = Bootloader/build/bootloader.hex</code>，<code>Erase All = false</code>，只擦写 <code>0x0–0x2FFF</code>，App 与 Meta 保持不变。</li>
+    <li>Bootloader 与 App 共用 <code>User/ota_*.c</code> 的 Meta / 包格式；升级 Boot 时保持两者兼容，改分区或 Meta 格式必须整片重装。</li>
+    <li>更新后复位，Bootloader 按现有 Meta 继续启动 App。</li>
+  </ul>
+
+  <h3>3.5 后续烧写方式对比</h3>
+  <div class="table-wrap">
+  <table>
+    <tr><th>维度</th><th>网络 OTA</th><th>串口 IAP</th><th>SWD 烧 App</th><th>SWD 烧 Boot</th></tr>
+    <tr><td>烧写对象</td><td>.dtufw</td><td>.dtufw</td><td>App hex</td><td>Boot hex</td></tr>
+    <tr><td>是否需要现场</td><td>否</td><td>是</td><td>是</td><td>是</td></tr>
+    <tr><td>完整性校验</td><td>CRC + SHA + RSA</td><td>CRC + SHA</td><td>无</td><td>无</td></tr>
+    <tr><td>版本 / 降级检查</td><td>有</td><td>有</td><td>无</td><td>无</td></tr>
+    <tr><td>写 Meta</td><td>是</td><td>是</td><td>否</td><td>否</td></tr>
+    <tr><td>推荐用途</td><td>现网批量</td><td>现场 / 产线</td><td>调试</td><td>修 Boot</td></tr>
+  </table>
+  </div>
+</section>
+
+<section id="build">
+  <h2>4. 环境与编译</h2>
+
+  <h3>4.1 工具</h3>
+  <div class="table-wrap">
+  <table>
+    <tr><th>工具</th><th>用途</th><th>说明</th></tr>
+    <tr><td>MounRiver Studio 3</td><td>打开 / 编译 App，SWD 下载</td><td>内置 RISC-V 工具链与 WCH-Link 支持</td></tr>
+    <tr><td>Python 3.8+</td><td><code>tools/*.py</code> 打包、合并、串口升级</td><td>标准库 + <code>pyserial</code></td></tr>
+    <tr><td>pyserial</td><td><code>ota_uart.py</code></td><td><code>python3 -m pip install pyserial</code></td></tr>
+    <tr><td>openssl</td><td>生成 / 导出 RSA 密钥、验签自检</td><td>macOS / Linux 自带</td></tr>
+  </table>
+  </div>
+
+  <p>工具链加入 <code>PATH</code>（macOS 示例）：</p>
+  <pre><code>export MRS_BIN="/Applications/MounRiver Studio 3.app/Contents/Resources/app/resources/darwin/components/WCH/Toolchain/RISC-V Embedded GCC/bin"
+export PATH="$MRS_BIN:$PATH"
+riscv-none-embed-gcc --version</code></pre>
+  <p class="small">Windows / Linux 在 MRS 安装目录的 <code>resources/app/resources/win32|linux/components/WCH/Toolchain/RISC-V Embedded GCC/bin</code>。</p>
+
+  <h3>4.2 编译 App</h3>
+  <p>MRS 3 中 <code>File → Open Folder…</code> 打开仓库根目录（或命令面板执行 <code>Open MRS Project</code>），右键工程 → <b>Build Project</b> / <b>ReBuild Project</b>。产物：</p>
+  <pre><code>obj/dtu-ethernet-ble-demo.hex    # 烧写 / 打包
+obj/dtu-ethernet-ble-demo.elf    # 调试
+obj/dtu-ethernet-ble-demo.map    # 体积分析</code></pre>
+  <p>首次构建会生成 <code>obj/makefile</code>（含本机绝对路径，由 MRS 维护）。之后可用命令行增量构建：</p>
+  <pre><code>make -C obj all
+make -C obj clean</code></pre>
+
+  <h3>4.3 编译 Bootloader</h3>
+  <pre><code>make -C Bootloader          # 构建 + 自动检查 12 KB 上限
+make -C Bootloader size     # 只打印体积并检查
+make -C Bootloader clean</code></pre>
+  <p>产物 <code>Bootloader/build/bootloader.{hex,bin,elf,map}</code>。Makefile 内置 size gate：<code>text + data</code> 超过 12288 字节直接失败（当前约 9060 字节）。</p>
+
+  <h3>4.4 版本、hw_id、密钥</h3>
+  <p><code>User/ota_config.h</code>：</p>
+  <pre><code>#define OTA_HW_ID      0x00000001u
+#define OTA_FW_VERSION OTA_MAKE_VERSION(0, 1, 0)
+#define OTA_BL_VERSION OTA_MAKE_VERSION(0, 1, 0)</code></pre>
+  <ul>
+    <li>发布新版本：改 <code>OTA_FW_VERSION</code> → 重新编译 App → 打包时 <code>--version</code> 用同一个值；不一致时 <code>mkfw.py</code> 告警。</li>
+    <li><code>OTA_HW_ID</code> 与打包 <code>--hw-id</code> 必须一致，否则设备拒绝（<code>HW_MISMATCH=10</code>）。</li>
+    <li>仓库只带开发公钥。量产替换密钥：</li>
+  </ul>
+  <pre><code>openssl genrsa -out prod_private.pem 2048
+openssl rsa -in prod_private.pem -pubout -outform DER -out prod_public.der
+python3 tools/pubkey2h.py prod_public.der -o User/ota_pubkey.h</code></pre>
+  <p class="small">私钥不得入库；Bootloader 不做 RSA 验签，替换公钥后只需重新编译 App。</p>
+
+  <h3>4.5 生成 .dtufw 固件包</h3>
+  <pre><code>python3 tools/mkfw.py --hex obj/dtu-ethernet-ble-demo.hex \
+    --version 0.2.0 --hw-id 1 \
+    --key tools/keys/dev_private.pem \
+    --pub tools/keys/dev_public.der \
+    -o build/dtu-0.2.0.dtufw</code></pre>
+  <p>包结构：512 B 包头（<code>DTUFW</code> 魔数、文件 / 镜像大小、CRC32、版本、hw_id、SHA-256、RSA-2048 签名）+ 256 B 对齐镜像。签名对象为 <code>SHA-256(header[0x000..0x040) || image)</code>。镜像超过 148 KB 或 hex 不在 <code>0x3000</code> 区段时工具直接失败。</p>
+</section>
+
+<section id="wiring">
+  <h2>5. 接线与下载配置</h2>
+
+  <h3>5.1 WCH-Link</h3>
+  <div class="table-wrap">
+  <table>
+    <tr><th>WCH-LINK</th><th>板子</th></tr>
+    <tr><td>3V3</td><td>VDD</td></tr>
+    <tr><td>GND</td><td>GND</td></tr>
+    <tr><td>SWDIO</td><td>PA13</td></tr>
+    <tr><td>SWCLK</td><td>PA14</td></tr>
+    <tr><td>RST</td><td>RST（建议接）</td></tr>
+  </table>
+  </div>
+
+  <h3>5.2 USB-TTL（串口 IAP / 日志）</h3>
+  <div class="table-wrap">
+  <table>
+    <tr><th>USB-TTL</th><th>板子</th></tr>
+    <tr><td>RX</td><td>PA9（USART1_TX）</td></tr>
+    <tr><td>TX</td><td>PA10（USART1_RX）</td></tr>
+    <tr><td>GND</td><td>GND</td></tr>
+    <tr><td>3V3</td><td>VDD（可选；板子独立供电时不要接）</td></tr>
+  </table>
+  </div>
+  <p>115200，8N1，无流控。该串口同时是 App 运行日志口；App 正常运行时不会响应 IAP 帧。</p>
+
+  <h3>5.3 MRS Download Configuration</h3>
+  <ul>
+    <li><code>Target Path</code>：要下载的 hex（默认 <code>obj/dtu-ethernet-ble-demo.hex</code>）；</li>
+    <li><code>Erase All</code>：<b>整片擦除开关</b>；</li>
+    <li><code>Program / Verify / Reset</code>：下载、校验、下载后复位。</li>
+  </ul>
+  <p>设置保存在仓库根目录 <code>.template</code>（已被 git 跟踪，提交前留意）。</p>
+
+  <div class="callout risk">
+    <strong>Erase All 是整片擦除</strong>
+    默认配置为 <code>Erase All=true</code>。只烧 App hex 会把 Bootloader（<code>0x0</code>）和 Meta（<code>0x28000</code>）一起擦掉，设备无法启动。只有烧合并 hex / 只装 Bootloader 时才用 <code>true</code>；SWD 只烧 App 或 Boot 时用 <code>false</code>。
+  </div>
+</section>
+
+<section id="serial">
+  <h2>6. 串口升级细节（USART1）</h2>
+
+  <h3>6.1 如何进入升级状态</h3>
+  <div class="table-wrap">
+  <table>
+    <tr><th>Meta 状态</th><th>Bootloader 行为</th></tr>
+    <tr><td><code>EMPTY</code> / <code>RECOVERY</code></td><td><b>无限等待</b>串口升级</td></tr>
+    <tr><td><code>BOOT_UART</code></td><td>等 HELLO <b>30 s</b>，超时按 <code>APP_VALID</code> 处理</td></tr>
+    <tr><td><code>APP_VALID</code></td><td>每次启动留 <b>500 ms</b> 窗口；收到 HELLO 就升级，否则 attempts+1 后跳 App</td></tr>
+    <tr><td><code>STAGED</code> / <code>COPYING</code></td><td>先校验并搬运，不等待串口</td></tr>
+  </table>
+  </div>
+  <p>标准操作：<b>先运行 <code>ota_uart.py</code>（持续发 HELLO），再复位设备</b>。500 ms 窗口较短，先启动工具、再按复位键即可稳定握手。</p>
+
+  <h3>6.2 使用 ota_uart.py</h3>
+  <pre><code>python3 tools/ota_uart.py /dev/tty.usbserial-XXXX build/dtu-0.2.0.dtufw</code></pre>
+  <div class="table-wrap">
+  <table>
+    <tr><th>参数</th><th>默认</th><th>说明</th></tr>
+    <tr><td><code>--baud</code></td><td>115200</td><td>必须与固件一致</td></tr>
+    <tr><td><code>--hello-timeout</code></td><td>15 s</td><td>等待 HELLO_ACK 的总时长（期间每 50 ms 发一次 HELLO）</td></tr>
+    <tr><td><code>--ack-timeout</code></td><td>5 s</td><td>单帧 ACK 超时</td></tr>
+    <tr><td><code>--allow-downgrade</code></td><td>关</td><td>BEGIN 时置降级标志</td></tr>
+  </table>
+  </div>
+
+  <h3>6.3 帧格式</h3>
+  <pre><code>A5 5A | ver(1)=01 | type(1) | flags/status(2 LE) | offset(4 LE) |
+len(2 LE) | data(len ≤ 256) | CRC16(2 LE，覆盖 ver..data)</code></pre>
+  <ul>
+    <li>CRC16：CCITT-FALSE，初值 <code>0xFFFF</code>，多项式 <code>0x1021</code>。</li>
+    <li>数据按 <b>256 字节页</b>发送，<code>offset</code> 必须等于已接收长度，每页一个 <code>DATA_ACK</code>。</li>
+  </ul>
+
+  <div class="table-wrap">
+  <table>
+    <tr><th>type</th><th>名称</th><th>方向</th></tr>
+    <tr><td>0x01 / 0x81</td><td>HELLO / HELLO_ACK</td><td>主机 / Bootloader</td></tr>
+    <tr><td>0x02 / 0x82</td><td>BEGIN / BEGIN_ACK</td><td>主机 / Bootloader</td></tr>
+    <tr><td>0x03 / 0x83</td><td>DATA / DATA_ACK</td><td>主机 / Bootloader</td></tr>
+    <tr><td>0x04 / 0x84</td><td>END / END_ACK</td><td>主机 / Bootloader</td></tr>
+    <tr><td>0x05</td><td>ABORT</td><td>主机</td></tr>
+    <tr><td>0x06</td><td>RESET</td><td>主机</td></tr>
+  </table>
+  </div>
+  <p>BEGIN 载荷 14 B：<code>file_size u32 | file_crc32 u32 | version u32 | flags u16</code>。END 后 Bootloader 校验整包 CRC32、镜像 CRC32、SHA-256 与包头；不符则回 <code>END_ACK</code> 状态码并结束会话；通过则写 Meta <code>STAGED</code>，搬运到 App 并再校验，成功后跳转，搬运 / 再校验失败进入 <code>RECOVERY</code>。</p>
+
+  <h3>6.4 状态码</h3>
+  <div class="table-wrap">
+  <table>
+    <tr><th>码</th><th>名称</th><th>常见原因</th></tr>
+    <tr><td>0</td><td>OK</td><td></td></tr>
+    <tr><td>1</td><td>BUSY</td><td>设备忙 / 正在处理</td></tr>
+    <tr><td>2</td><td>BAD_FRAME</td><td>CRC16 错、帧长度错</td></tr>
+    <tr><td>3</td><td>BAD_STATE</td><td>未 BEGIN 就发 DATA / END</td></tr>
+    <tr><td>4</td><td>NO_SPACE</td><td>包内 image_size 超过 148 KB</td></tr>
+    <tr><td>5</td><td>BAD_SIZE</td><td>大小非 256 倍数、单页长度错、offset 跳变</td></tr>
+    <tr><td>6</td><td>FLASH_ERR</td><td>Flash 擦写失败</td></tr>
+    <tr><td>7</td><td>CRC_MISMATCH</td><td>整包 / 镜像 CRC 或 SHA-256 不符</td></tr>
+    <tr><td>8</td><td>BAD_SIGNATURE</td><td>仅网络 OTA（App 侧 RSA 验签失败）</td></tr>
+    <tr><td>9</td><td>VERSION_REJECTED</td><td>版本不高于当前，需 <code>--allow-downgrade</code></td></tr>
+    <tr><td>10</td><td>HW_MISMATCH</td><td>包 hw_id 与设备不符</td></tr>
+    <tr><td>11</td><td>BAD_PACKAGE</td><td>包头字段非法</td></tr>
+    <tr><td>12</td><td>BAD_MAGIC</td><td>包头 magic 不是 DTUFW</td></tr>
+  </table>
+  </div>
+
+  <div class="callout warn">
+    <strong>安全边界</strong>
+    网络 OTA 在 App 侧验 RSA 签名；串口 IAP 只校验 CRC32 / SHA-256（Bootloader 不含 RSA），只保证完整性、不保证来源，依赖物理接触设备。
+  </div>
+</section>
+
+<section id="network">
+  <h2>7. 网络 OTA 细节（HTTPS）</h2>
+
+  <h3>7.1 流程</h3>
+  <ol>
+    <li>App 保持 wss 连接；服务端下发<b>二进制通知</b>（<code>DTUO</code> TLV）。</li>
+    <li>App 校验通知，成功回文本 <code>ota=starting</code>，否则回 <code>ota=failed;code=N</code>。</li>
+    <li>回调返回后 App 关闭 WS/TLS，复用<b>唯一的 TCP socket</b> 连接固件服务器。</li>
+    <li>HTTPS GET 下载整包到 Staging（<code>0x2A000</code>），要求 <code>Content-Length</code> 精确匹配。</li>
+    <li>校验包 CRC32、SHA-256、版本 / hw_id 与 RSA 签名，全部通过后写 Meta=<code>STAGED</code> 并复位。</li>
+    <li>Bootloader 校验 Staging → 搬运到 App → 再校验 → 跳转。</li>
+    <li>下次 WS 连接建立时上报 <code>fw=x.y.z;hw=XXXXXXXX;ota=done</code>（失败则 <code>ota=failed;code=N</code>），随后清除待上报标志。</li>
+  </ol>
+
+  <h3>7.2 通知格式（WS binary，DTUO TLV）</h3>
+  <div class="table-wrap">
+  <table>
+    <tr><th>偏移</th><th>长度</th><th>内容</th></tr>
+    <tr><td>0</td><td>4</td><td>magic <code>"DTUO"</code>（<code>44 54 55 4F</code>）</td></tr>
+    <tr><td>4</td><td>1</td><td>协议版本 = <code>1</code></td></tr>
+    <tr><td>5</td><td>1</td><td>类型 = <code>0x10</code>（OTA 通知）</td></tr>
+    <tr><td>6</td><td>2</td><td>flags（bit0 = allow downgrade），LE</td></tr>
+    <tr><td>8</td><td>4</td><td>file_size（<code>.dtufw</code> 总字节数），LE</td></tr>
+    <tr><td>12</td><td>4</td><td>version（<code>major&lt;&lt;16|minor&lt;&lt;8|patch</code>），LE</td></tr>
+    <tr><td>16</td><td>2</td><td>URL 长度 N（≤ 220），LE</td></tr>
+    <tr><td>18</td><td>N</td><td>固件 URL，<b>必须 <code>https://</code></b></td></tr>
+    <tr><td>18+N</td><td>2</td><td>CRC16/CCITT-FALSE，覆盖字节 <code>[4, 18+N)</code>，LE</td></tr>
+  </table>
+  </div>
+  <p>总长度 <code>20+N</code>，限制在 20–240 字节。<code>file_size</code> 必须满足 <code>512 + 256 ≤ file_size ≤ 512 + 148 KB</code>，且 <code>(file_size - 512)</code> 是 256 的倍数。</p>
+
+  <h3>7.3 通知帧生成示例</h3>
+  <pre><code>import struct
+
+def crc16(data, crc=0xFFFF):
+    for b in data:
+        crc ^= b &lt;&lt; 8
+        for _ in range(8):
+            crc = ((crc &lt;&lt; 1) ^ 0x1021) &amp; 0xFFFF if crc &amp; 0x8000 else (crc &lt;&lt; 1) &amp; 0xFFFF
+    return crc
+
+def ota_notify(url, file_size, version, flags=0):
+    u = url.encode("ascii")
+    assert u.startswith(b"https://") and len(u) &lt;= 220
+    body = b"DTUO" + bytes([1, 0x10]) + struct.pack("&lt;HIIH", flags, file_size, version, len(u)) + u
+    return body + struct.pack("&lt;H", crc16(body[4:]))
+
+# 版本 0.2.0 = 0x000200
+frame = ota_notify("https://fw.example.com/dtu/dtu-0.2.0.dtufw", 152064, 0x000200)
+# ws.send_binary(frame)</code></pre>
+
+  <h3>7.4 固件服务器要求</h3>
+  <ul>
+    <li><b>只支持 HTTPS</b>；TLS 1.2 套件 <code>ECDHE-RSA-AES128-GCM-SHA256</code>，服务器证书需 RSA-2048，证书链记录不超过 4096 字节。</li>
+    <li>设备<b>不校验服务器证书</b>（<code>MBEDTLS_SSL_VERIFY_NONE</code>），完整性由包内 RSA 签名保证。</li>
+    <li>必须返回精确的 <code>Content-Length</code>；不支持 chunked、Range、301/302 跳转。</li>
+    <li>URL 最长 220 字符，可带 query；支持域名（走 DNS）或 IPv4 字面量（直连，跳过 DNS）。</li>
+    <li>下载期间设备只有一个 TCP socket，wss 会断开，升级完成后自动重连。</li>
+  </ul>
+
+  <div class="callout">
+    <strong>评审确认的安全约束</strong>
+    仅允许 <code>https://</code>；固件 URL 不做域名白名单；TLS 不校验证书；默认拒绝降级；Bootloader 未启用 WRP 写保护；私钥不入库。
+  </div>
+</section>
+
+<section id="boot">
+  <h2>8. 启动决策与恢复</h2>
+
+  <div class="table-wrap">
+  <table>
+    <tr><th>Meta 状态</th><th>行为</th></tr>
+    <tr><td><code>EMPTY</code></td><td>无限等待串口 IAP</td></tr>
+    <tr><td><code>RECOVERY</code></td><td>无限等待串口 IAP</td></tr>
+    <tr><td><code>STAGED</code> / <code>COPYING</code></td><td>校验 Staging（Meta VERIFIED + 包头 SHA/CRC/尺寸/版本一致）→ 搬运到 App → 校验 → <code>APP_VALID</code> 并跳转；Staging 无效则改回 <code>APP_VALID</code>，搬运失败进入 <code>RECOVERY</code></td></tr>
+    <tr><td><code>BOOT_UART</code></td><td>等 HELLO 30 s：收到则升级，超时转 <code>APP_VALID</code></td></tr>
+    <tr><td><code>APP_VALID</code></td><td>attempts ≥ 5 或 App 向量表非法 → <code>RECOVERY</code>；否则留 500 ms HELLO 窗口，尝试次数 +1，跳 App</td></tr>
+  </table>
+  </div>
+
+  <p>App 启动 30 s 后调用 <code>confirm_running()</code>：写回 <code>APP_VALID</code>、attempts=0、版本以实际运行为准。<b>累计 5 次上电都没撑过 30 s，下一次启动就进入 RECOVERY</b>（防“新固件起不来”死循环）。</p>
+
+  <h3>恢复步骤</h3>
+  <ol>
+    <li>USB-TTL 接 PA9 / PA10 与 GND；</li>
+    <li>运行 <code>python3 tools/ota_uart.py &lt;port&gt; &lt;正常的 .dtufw&gt;</code>；</li>
+    <li>复位设备；工具握手后完成升级，Bootloader 搬运并跳转 App；</li>
+    <li>若仍失败，检查包版本 / hw_id / 签名以及串口接线。</li>
+  </ol>
+</section>
+
+<section id="trouble">
+  <h2>9. 故障排查</h2>
+  <div class="table-wrap">
+  <table>
+    <tr><th>现象</th><th>原因 / 处理</th></tr>
+    <tr><td><code>riscv-none-embed-gcc: command not found</code></td><td>工具链未加入 <code>PATH</code></td></tr>
+    <tr><td><code>make -C obj</code> 报 No such file or directory</td><td>全新克隆没有 <code>obj/</code>，先在 MRS 中构建一次</td></tr>
+    <tr><td>链接报 <code>main</code> 重复定义 / 找不到 <code>boot_main.h</code></td><td><code>Bootloader/</code> 被加入 App 构建；恢复 <code>.project</code> filter 与 <code>.cproject</code> excluding</td></tr>
+    <tr><td>烧录后完全无输出、串口无反应</td><td>只烧 App hex 且 <code>Erase All=true</code>，Bootloader 被擦；烧 <code>build/dtu-full.hex</code></td></tr>
+    <tr><td>烧完合并 hex 后设备不运行、串口等升级</td><td>正常现象：Meta=<code>EMPTY</code>，执行一次串口 IAP</td></tr>
+    <tr><td>串口工具报“等待 HELLO_ACK 超时”</td><td>未在窗口内复位；TX/RX 接反；或错过 500 ms 窗口。先运行工具再复位；必要时让设备进 <code>RECOVERY</code></td></tr>
+    <tr><td>串口 BEGIN 返回 9</td><td>包版本不高于当前；换更高版本或 <code>--allow-downgrade</code></td></tr>
+    <tr><td>串口返回 10</td><td>包 hw_id 与设备不符；检查 <code>--hw-id</code> 与 <code>OTA_HW_ID</code></td></tr>
+    <tr><td>串口返回 5 / 7</td><td>包损坏或大小不对；重新打包</td></tr>
+    <tr><td>网络 OTA 回复 <code>ota=failed;code=9</code></td><td>版本未提升；改 <code>OTA_FW_VERSION</code> 重编重打包</td></tr>
+    <tr><td>网络 OTA 卡住 / 超时</td><td>服务器返回 chunked / 302、<code>Content-Length</code> 不符，或 TLS 套件 / 证书不匹配</td></tr>
+    <tr><td>升级后版本号没变</td><td><code>mkfw.py --version</code> 与 <code>OTA_FW_VERSION</code> 不一致；改版本、重编 App、重打包</td></tr>
+    <tr><td>App 运行 30 s 内复位多次后进 RECOVERY</td><td>正常保护；串口重新刷入稳定固件</td></tr>
+  </table>
+  </div>
+</section>
+
+<section id="cheatsheet">
+  <h2>10. 命令速查</h2>
+  <pre><code># 工具链
+export MRS_BIN="/Applications/MounRiver Studio 3.app/Contents/Resources/app/resources/darwin/components/WCH/Toolchain/RISC-V Embedded GCC/bin"
+export PATH="$MRS_BIN:$PATH"
+
+# 编译
+make -C Bootloader                 # Bootloader + 12 KB 检查
+make -C obj all                    # App（需 MRS 先构建过）
+
+# 打包与合并
+python3 tools/mkfw.py --hex obj/dtu-ethernet-ble-demo.hex --version 0.2.0 \
+    --key tools/keys/dev_private.pem --pub tools/keys/dev_public.der \
+    -o build/dtu-0.2.0.dtufw
+python3 tools/merge_hex.py Bootloader/build/bootloader.hex \
+    obj/dtu-ethernet-ble-demo.hex -o build/dtu-full.hex
+
+# 初次烧写（OpenOCD）
+OC="/Applications/MounRiver Studio 3.app/Contents/Resources/app/resources/darwin/components/WCH/OpenOCD/OpenOCD/bin"
+"$OC/openocd" -f "$OC/wch-riscv.cfg" \
+    -c "init; halt; program build/dtu-full.hex verify reset; exit"
+
+# 后续烧写（串口 IAP，先开工具再复位）
+python3 tools/ota_uart.py /dev/tty.usbserial-XXXX build/dtu-0.2.0.dtufw
+python3 tools/ota_uart.py /dev/tty.usbserial-XXXX build/dtu-0.1.0.dtufw --allow-downgrade</code></pre>
+</section>
+
+<section id="layout">
+  <h2>附录：Flash 分区（已冻结）</h2>
+  <div class="table-wrap">
+  <table>
+    <tr><th>分区</th><th>地址</th><th>大小</th><th>用途</th></tr>
+    <tr><td>Bootloader</td><td><code>0x00000–0x02FFF</code></td><td>12 KB</td><td>启动决策、串口 IAP、Staging→App 搬运</td></tr>
+    <tr><td>App</td><td><code>0x03000–0x27FFF</code></td><td>148 KB</td><td>应用镜像（<code>Ld/Link.ld</code>）</td></tr>
+    <tr><td>Meta</td><td><code>0x28000–0x29FFF</code></td><td>8 KB</td><td>OTA 状态记录，两个 4 KB 页轮换</td></tr>
+    <tr><td>Staging</td><td><code>0x2A000–0x51FFF</code></td><td>160 KB</td><td>接收的固件包（含 512 B 包头）</td></tr>
+    <tr><td>Backup</td><td><code>0x52000–0x77FFF</code></td><td>152 KB</td><td>预留，本期未使用</td></tr>
+  </table>
+  </div>
+  <p class="small">分区常量在 <code>User/ota_layout.h</code>。修改布局必须同步 <code>Ld/Link.ld</code>、<code>Bootloader/Link_boot.ld</code> 与本手册，并重新评估打包/升级工具的上限。</p>
+</section>
+
+</main>
+</div>
+
+<footer>
+  dtu-ethernet-ble-demo · CH32V208WBU6 · 编译、烧写与固件升级手册 · 与 <code>how-to-build-flash.md</code> 同步维护
+</footer>
+</body>
+</html>

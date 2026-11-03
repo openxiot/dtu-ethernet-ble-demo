@@ -63,3 +63,10 @@ Debug/obj/
 
 # MounRiver Studio session snapshots
 .mrs/dtu-ethernet-ble-demo-*.mrs-workspace
+
+# 构建产物（App/Bootloader 合并 hex、固件包等）
+build/
+Bootloader/build/
+
+# OTA 签名私钥：只保留在本地/CI 密钥库，禁止提交
+tools/keys/*.pem

@@ -13,6 +13,7 @@
 #include "eth_driver.h"
 #include "transport_eth.h"
 #include "dtu_app.h"
+#include "ota_app.h"
 
 /*********************************************************************
  * @fn      TIM2_Init
@@ -80,6 +81,7 @@ int main(void)
 
     TIM2_Init();
     transport_eth_init();
+    ota_app_init();
     dtu_app_init();
 
     while (1) {

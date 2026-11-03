@@ -20,6 +20,7 @@
 #if DTU_TLS == 0
 /* ---------------- 明文透传（ws://） ---------------- */
 void wss_tls_init(void) { }
+void wss_tls_set_hostname(const char *host) { (void)host; }
 int  wss_tls_handshake(void) { return 0; }
 int  wss_tls_read(uint8_t *buf, uint32_t maxlen) { return transport_tcp_read(buf, maxlen); }
 int  wss_tls_write(const uint8_t *buf, uint32_t len) { return transport_tcp_write(buf, len); }
@@ -52,6 +53,12 @@ static mbedtls_ctr_drbg_context drbg;
 
 static int tls_started;   /* 上下文已初始化、首次握手已开始 */
 static int tls_ready;     /* 握手完成，可收发 */
+static const char *tls_host = DTU_HOST;   /* SNI / Host 名，OTA 时会改写 */
+
+void wss_tls_set_hostname(const char *host)
+{
+    tls_host = host;
+}
 
 /* 无硬件熵源时的弱熵回调（只用做密钥随机种子的补充）。
  * 正式产品请接入真实 TRNG/ADC 噪声等。 */
@@ -175,8 +182,10 @@ int wss_tls_handshake(void)
                (unsigned long)debug_heap_used(), (unsigned long)debug_heap_free());
 
         mbedtls_ssl_set_bio(&ssl, NULL, net_send, net_recv, NULL);
-        ret = mbedtls_ssl_set_hostname(&ssl, DTU_HOST);
-        if (ret != 0) { tls_print_err("set_hostname", ret); return -5; }
+        if (tls_host && tls_host[0]) {
+            ret = mbedtls_ssl_set_hostname(&ssl, tls_host);
+            if (ret != 0) { tls_print_err("set_hostname", ret); return -5; }
+        }
 
         tls_started = 1;
     }

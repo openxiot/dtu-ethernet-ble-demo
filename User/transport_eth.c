@@ -32,6 +32,12 @@ static uint8_t           TransportDnsServer[4];     /* 记住 DNS 服务器，�
 static uint8_t           TransportSocketId = 0xFF;
 static volatile uint8_t  TransportOpened = 0;   /* TCP ESTABLISHED */
 
+/* 目标主机：平时是 DTU_HOST，OTA 期间切到固件服务器 */
+static const char       *TransportHost = DTU_HOST;
+static uint16_t          TransportPort = DTU_PORT;
+static int               TransportOta = 0;
+static char              TransportOtaHost[64];
+
 volatile uint32_t g_sys_ms = 0;   /* 系统毫秒节拍，TIM2 中断累加 */
 
 /* 诊断用：TCP 层累计收发字节数（TLS 握手失败时打印） */
@@ -167,14 +173,14 @@ static void transport_start_dns(u8 *dns_server_ip)
     if (TransportDnsServer[0] | TransportDnsServer[1] |
         TransportDnsServer[2] | TransportDnsServer[3]) {
         WCHNET_InitDNS(TransportDnsServer, 53);
-        printf("DNS query %s (server %d.%d.%d.%d)\r\n", DTU_HOST,
+        printf("DNS query %s (server %d.%d.%d.%d)\r\n", TransportHost,
                TransportDnsServer[0], TransportDnsServer[1],
                TransportDnsServer[2], TransportDnsServer[3]);
     } else {
-        printf("DNS query %s (no server!)\r\n", DTU_HOST);
+        printf("DNS query %s (no server!)\r\n", TransportHost);
     }
 
-    ret = WCHNET_HostNameGetIp((char *)DTU_HOST, TransportRemoteIP,
+    ret = WCHNET_HostNameGetIp((char *)TransportHost, TransportRemoteIP,
                                dtu_dns_cb, NULL);
     if (ret != WCHNET_ERR_SUCCESS) {      /* DNS 立即失败 */
         transport_schedule_retry();
@@ -190,7 +196,7 @@ static void transport_do_connect(void)
 
     memset(&inf, 0, sizeof(inf));
     memcpy(inf.IPAddr, TransportRemoteIP, 4);
-    inf.DesPort   = DTU_PORT;
+    inf.DesPort   = TransportPort;
     inf.SourPort  = (u16)(1000u + (g_sys_ms & 0x0FFFFu));
     inf.ProtoType = PROTO_TYPE_TCP;
     inf.RecvBufLen= RECE_BUF_LEN;
@@ -379,6 +385,9 @@ void transport_eth_init(void)
     }
 }
 
+static int transport_parse_ipv4(const char *s, u8 *ip);
+static void transport_start_resolve(void);
+
 void transport_eth_poll(void)
 {
     /* 驱动协议栈主任务并处理中断 */
@@ -395,8 +404,7 @@ void transport_eth_poll(void)
             if (TransportSocketId < WCHNET_MAX_SOCKET_NUM)
                 WCHNET_SocketClose(TransportSocketId, TCP_CLOSE_NORMAL);
             TransportSocketId = 0xFF;
-            transport_start_dns(NULL);
-            ts = TS_DNS;
+            transport_start_resolve();
         }
     }
 }
@@ -422,4 +430,88 @@ void transport_eth_reconnect_delay(uint32_t ms)
     ts_fail_at = (uint32_t)g_sys_ms + ms;
     printf("retry in %lums\r\n", (unsigned long)ms);
     ts = TS_FAIL;
+}
+
+/* "a.b.c.d" 字面量解析；非 IPv4 返回 0。OTA URL 允许直连 IP，避免走 DNS。 */
+static int transport_parse_ipv4(const char *s, u8 *ip)
+{
+    int part = 0, val = 0, digits = 0;
+
+    for (;;) {
+        char c = *s++;
+        if (c >= '0' && c <= '9') {
+            val = val * 10 + (c - '0');
+            if (++digits > 3 || val > 255) return 0;
+        } else if (c == '.' || c == 0) {
+            if (digits == 0 || part >= 4) return 0;
+            ip[part++] = (u8)val;
+            val = 0;
+            digits = 0;
+            if (c == 0) break;
+        } else {
+            return 0;
+        }
+    }
+    return part == 4;
+}
+
+/* 主机名是 IPv4 字面量时直连，否则走 DNS。 */
+static void transport_start_resolve(void)
+{
+    u8 ip[4];
+
+    if (transport_parse_ipv4(TransportHost, ip)) {
+        memcpy(TransportRemoteIP, ip, 4);
+        transport_print_ip("direct", ip);
+        transport_do_connect();
+        ts = TS_CONNECT;
+    } else {
+        transport_start_dns(NULL);
+        ts = TS_DNS;
+    }
+}
+
+int transport_eth_ota_start(const char *host, uint16_t port)
+{
+    uint32_t n;
+
+    if (!host || !host[0]) return -1;
+    n = (uint32_t)strlen(host);
+    if (n >= sizeof(TransportOtaHost)) return -1;
+
+    memcpy(TransportOtaHost, host, n + 1);
+    TransportOta  = 1;
+    TransportHost = TransportOtaHost;
+    TransportPort = port;
+
+    TransportOpened = 0;
+    if (TransportSocketId < WCHNET_MAX_SOCKET_NUM)
+        WCHNET_SocketClose(TransportSocketId, TCP_CLOSE_NORMAL);
+    TransportSocketId = 0xFF;
+
+    reconnect_ms = 0;              /* OTA 失败由 ota_https 计时，不沿用 WS 退避 */
+    ts_fail_at = 0;
+    printf("[ota] target %s:%u\r\n", TransportHost, (unsigned)TransportPort);
+    transport_start_resolve();
+    return 0;
+}
+
+void transport_eth_ota_stop(void)
+{
+    TransportOta  = 0;
+    TransportHost = DTU_HOST;
+    TransportPort = DTU_PORT;
+
+    TransportOpened = 0;
+    if (TransportSocketId < WCHNET_MAX_SOCKET_NUM)
+        WCHNET_SocketClose(TransportSocketId, TCP_CLOSE_NORMAL);
+    TransportSocketId = 0xFF;
+
+    transport_schedule_retry();
+    ts = TS_FAIL;
+}
+
+int transport_eth_is_ota(void)
+{
+    return TransportOta;
 }

@@ -37,4 +37,15 @@ void transport_eth_reconnect(void);
 /* 触发重连，但等 ms 毫秒后再重试（用于服务端重复会话等需等待的场景）。 */
 void transport_eth_reconnect_delay(uint32_t ms);
 
+/* OTA 专用：把单 socket 切到固件服务器。
+ * 调用前必须已关闭 WS/TLS；host 为 NULL 时直接失败。
+ * 连接期间 transport_tcp_read/write 照常使用；失败重试也指向该主机。 */
+int  transport_eth_ota_start(const char *host, uint16_t port);
+
+/* 结束 OTA：回到 DTU_HOST 并重新连接 WS。 */
+void transport_eth_ota_stop(void);
+
+/* 当前是否处于 OTA 目标模式。 */
+int  transport_eth_is_ota(void);
+
 #endif /* __TRANSPORT_ETH_H__ */
