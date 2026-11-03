@@ -1,0 +1,209 @@
+name: Release Firmware
+
+# 推送 vX.Y.Z 标签后自动：编译 Bootloader + App -> 合并镜像 -> 用
+# Repository secret FW_SIGNING_KEY 签名 .dtufw -> 发布 GitHub Release。
+#
+# 版本号只来自 tag（如 v0.0.1 -> 0.0.1），构建时写入 User/ota_config.h 的
+# OTA_FW_VERSION，保证固件内上报的版本与包版本一致。
+
+on:
+  push:
+    tags:
+      - 'v*'
+  # 手动运行只构建并上传 Artifact，用于验证流程，不创建 Release。
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '构建版本号 X.Y.Z（仅手动验证用）'
+        required: true
+        default: '0.0.0'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  MRS_TOOLCHAIN_DIR: ${{ github.workspace }}/.toolchain/mrs-1.92
+  MRS_TOOLCHAIN_URL: https://github.com/ch32-riscv-ug/MounRiver_Studio_Community_miror/releases/download/1.92-toolchain/MRS_Toolchain_Linux_x64_V1.92.tar.xz
+  MRS_TOOLCHAIN_SHA256: 33e0dd7581a2eea25bc5d1aa2c31f5c8b316e543b954d84f9e1ffc5999e93fea
+
+jobs:
+  build:
+    name: Build & Sign
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 校验 tag 并解析版本
+        id: version
+        shell: bash
+        env:
+          MANUAL_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            version="${MANUAL_VERSION:-}"
+          else
+            tag="${GITHUB_REF_NAME}"
+            if [[ "$tag" != v* ]]; then
+              echo "::error::tag 必须以 v 开头（例如 v0.0.1），当前为：$tag"
+              exit 1
+            fi
+            version="${tag#v}"
+          fi
+          if ! [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::版本格式必须是 X.Y.Z（例如 0.0.1），当前为：$version"
+            exit 1
+          fi
+          major=${BASH_REMATCH[1]}
+          minor=${BASH_REMATCH[2]}
+          patch=${BASH_REMATCH[3]}
+          for part in "$major" "$minor" "$patch"; do
+            if (( part > 255 )); then
+              echo "::error::版本各段必须在 0..255 之间：$version"
+              exit 1
+            fi
+          done
+          echo "value=${major}.${minor}.${patch}" >> "$GITHUB_OUTPUT"
+          echo "固件版本：${major}.${minor}.${patch}"
+
+      - name: 缓存 MounRiver 工具链
+        id: cache-toolchain
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.MRS_TOOLCHAIN_DIR }}
+          key: mrs-toolchain-1.92-linux-x64
+
+      - name: 下载 MounRiver 工具链
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --retry-delay 5 -o "$RUNNER_TEMP/mrs.tar.xz" "$MRS_TOOLCHAIN_URL"
+          echo "$MRS_TOOLCHAIN_SHA256  $RUNNER_TEMP/mrs.tar.xz" | sha256sum -c -
+          mkdir -p "$MRS_TOOLCHAIN_DIR"
+          tar -xJf "$RUNNER_TEMP/mrs.tar.xz" -C "$MRS_TOOLCHAIN_DIR" --strip-components=1
+
+      - name: 配置工具链
+        shell: bash
+        run: |
+          set -euo pipefail
+          bin="$MRS_TOOLCHAIN_DIR/RISC-V_Embedded_GCC/bin"
+          if [ ! -x "$bin/riscv-none-embed-gcc" ]; then
+            echo "::error::工具链中未找到 $bin/riscv-none-embed-gcc"
+            exit 1
+          fi
+          echo "$bin" >> "$GITHUB_PATH"
+          "$bin/riscv-none-embed-gcc" --version | head -1
+
+      - name: 将 tag 版本写入固件配置
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          python3 - "$VERSION" <<'PY'
+          import re
+          import sys
+
+          version = sys.argv[1]
+          path = "User/ota_config.h"
+          with open(path, encoding="utf-8") as f:
+              text = f.read()
+
+          pattern = r"(?m)^(#define\s+OTA_FW_VERSION\s+)OTA_MAKE_VERSION\([^)]*\)"
+          repl = lambda m: m.group(1) + "OTA_MAKE_VERSION(" + ", ".join(version.split(".")) + ")"
+          text, count = re.subn(pattern, repl, text)
+          if count != 1:
+              sys.exit(f"写入 OTA_FW_VERSION 失败（匹配到 {count} 处）")
+
+          with open(path, "w", encoding="utf-8") as f:
+              f.write(text)
+          PY
+          grep -E '^#define[[:space:]]+OTA_FW_VERSION' User/ota_config.h
+
+      - name: 写入签名私钥
+        shell: bash
+        env:
+          FW_SIGNING_KEY: ${{ secrets.FW_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${FW_SIGNING_KEY:-}" ]; then
+            echo "::error::未配置 Repository secret FW_SIGNING_KEY（RSA-2048 PEM 私钥）"
+            exit 1
+          fi
+          umask 077
+          printf '%s\n' "$FW_SIGNING_KEY" > "$RUNNER_TEMP/fw_private.pem"
+          if ! openssl rsa -in "$RUNNER_TEMP/fw_private.pem" -noout -text 2>/dev/null \
+               | grep -q '2048 bit'; then
+            echo "::error::FW_SIGNING_KEY 不是可解析的 RSA-2048 私钥"
+            exit 1
+          fi
+          openssl pkey -in "$RUNNER_TEMP/fw_private.pem" -pubout -outform DER \
+            -out "$RUNNER_TEMP/fw_public.der"
+
+      - name: 编译并打包固件
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          # App + Bootloader + dtu-full.hex + 用 tag 版本签名的 .dtufw
+          make -j"$(nproc)" \
+            FW_KEY="$RUNNER_TEMP/fw_private.pem" \
+            FW_REQUIRE_KEY_MATCH=1
+          test -f "build/dtu-$VERSION.dtufw"
+
+      - name: 校验 App 镜像地址范围
+        shell: bash
+        run: |
+          set -euo pipefail
+          source tools/build-env.sh
+          read -r min max bytes <<< "$(hex_range build/app/dtu-ethernet-ble-demo.hex)"
+          echo "App hex: ${min}..${max}，${bytes} B"
+          if [ "$min" != "0x03000" ]; then
+            echo "::error::App 起始地址应为 0x03000，实际 $min"
+            exit 1
+          fi
+          if (( max >= 0x28000 )); then
+            echo "::error::App 结束地址 $max 超出 0x27FFF"
+            exit 1
+          fi
+
+      - name: 清理签名私钥
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/fw_private.pem" "$RUNNER_TEMP/fw_public.der"
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: dtu-firmware-${{ steps.version.outputs.value }}
+          if-no-files-found: error
+          path: |
+            build/dtu-${{ steps.version.outputs.value }}.dtufw
+            build/dtu-full.hex
+            build/app/dtu-ethernet-ble-demo.hex
+            build/app/dtu-ethernet-ble-demo.elf
+            Bootloader/build/bootloader.hex
+
+      - name: 创建 GitHub Release
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          gh release create "$GITHUB_REF_NAME" \
+            "build/dtu-$VERSION.dtufw" \
+            build/dtu-full.hex \
+            --title "DTU 固件 $VERSION" \
+            --generate-notes \
+            --verify-tag

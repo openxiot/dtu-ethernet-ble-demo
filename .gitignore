@@ -70,3 +70,8 @@ Bootloader/build/
 
 # OTA 签名私钥：只保留在本地/CI 密钥库，禁止提交
 tools/keys/*.pem
+/prod_private.pem
+/prod_public.der
+
+# CI 下载的 MounRiver 工具链缓存
+/.toolchain/

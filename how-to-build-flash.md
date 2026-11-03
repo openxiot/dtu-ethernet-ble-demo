@@ -117,7 +117,45 @@ MRS 3 基于 VS Code 界面，不是 Eclipse 的 Import 流程：
 
 首次构建会生成 `obj/makefile`。该文件包含本机绝对路径、由 MRS 维护，**不要手工编辑，也不要提交**。
 
-### 3.2 命令行构建
+### 3.2 命令行构建（不依赖 MRS，推荐）
+
+仓库根目录的 `Makefile` 由仓库维护，源文件与编译参数都来自仓库内容，**不需要** MRS 生成的 `obj/`：
+
+```sh
+make -j"$(nproc 2>/dev/null || sysctl -n hw.ncpu)"
+make size            # 只检查 text+data 是否超过 148 KB
+make clean
+```
+
+一次 `make` 会构建 App 与 Bootloader，并生成两个烧写产物：
+
+| 产物 | 内容 | 用途 |
+|---|---|---|
+| `build/dtu-full.hex` | Bootloader（`0x0`）+ App（`0x3000`），不含 Meta | **首次** SWD/WCH-Link 烧写 |
+| `build/dtu-<版本>.dtufw` | 512 B 包头 + 仅 App + RSA 签名 | **后续升级**：串口 IAP / 网络 OTA |
+
+`.dtufw` 只装 App：升级时由设备上已有的 Bootloader 接收并搬运，Bootloader 本身不参与 OTA。
+签名私钥默认依次找 `prod_private.pem`、`tools/keys/prod_private.pem`、
+`tools/keys/dev_private.pem`；都没有时 `make` 只跳过 `.dtufw`，其余照常构建。
+也可只做其中一步：
+
+```sh
+make image                 # 只合并 build/dtu-full.hex
+make fw FW_KEY=prod_private.pem          # 只打包签名固件
+make fw FW_REQUIRE_KEY_MATCH=1           # 私钥与内嵌公钥不一致时直接失败
+```
+
+产物都在 `build/`，不会覆盖 `obj/` 里的 MRS 构建结果。
+
+前提是 `riscv-none-embed-gcc` 在 `PATH` 中；也可显式指定前缀：
+
+```sh
+make CROSS="/Applications/MounRiver Studio 3.app/Contents/Resources/app/resources/darwin/components/WCH/Toolchain/RISC-V Embedded GCC/bin/riscv-none-embed-"
+```
+
+GitHub Actions（见 6.1）用的就是这条路径。
+
+### 3.3 用 MRS 生成的 `obj/` 构建
 
 前提：MRS 已成功构建过至少一次（`obj/makefile` 已生成），且工具链在 `PATH` 中。
 
@@ -128,8 +166,8 @@ make -C obj clean    # 清理 App 目标文件
 ./build-app.sh       # 等价封装：定位工具链、构建并校验 0x3000 起始/148 KB 上限
 ```
 
-> 全新克隆的仓库没有 `obj/`，命令行无法直接构建；先在 MRS 里构建一次即可。
 > `obj/makefile` 里的路径是绝对路径，仓库换目录后需在 MRS 里重建。
+> 只想命令行构建、不想开 MRS 时，用 3.2 的 `make` 即可。
 
 App 链接上限 148 KB（`0x3000–0x27FFF`），超过会链接失败。
 当前实现约 137 KB Flash / 21 KB bss，余量约 11 KB。
@@ -139,6 +177,7 @@ App 链接上限 148 KB（`0x3000–0x27FFF`），超过会链接失败。
 ## 4. 编译 Bootloader
 
 ```sh
+make bootloader             # 等价于 make -C Bootloader
 make -C Bootloader          # 构建 + 自动检查 12 KB 上限
 make -C Bootloader size     # 只打印体积并检查上限
 make -C Bootloader clean    # 清理
@@ -177,6 +216,7 @@ Bootloader 与 App 共用 `User/ota_crc.c`、`ota_sha256.c`、`ota_meta.c`、`ot
 
 - 编码：`major << 16 | minor << 8 | patch`，文本显示为 `major.minor.patch`。
 - 发布新版本：改 `OTA_FW_VERSION` → **重新编译 App** → 打包时 `--version` 用同一个值。
+  走 GitHub Actions（6.1）时不用手改：工作流用 tag 版本覆盖 `OTA_FW_VERSION`。
 - 版本不一致时 `mkfw.py` 会打印警告；升级后版本没变化的常见原因就是这里没改或没重编。
 - 降级默认被拒绝（串口 BEGIN 与网络通知都会比较版本），确有需要时用
   `ota_uart.py --allow-downgrade` 或 `mkfw.py --allow-downgrade`。
@@ -262,6 +302,32 @@ python3 tools/mkfw.py --hex obj/dtu-ethernet-ble-demo.hex \
 签名对象：`SHA-256(header[0x000..0x040) || image)`。
 镜像超过 148 KB、或 hex 不在 `0x3000` 区段时工具直接失败。
 
+### 6.1 GitHub Actions 自动发布（按 tag）
+
+仓库带有 `.github/workflows/release.yml`。推送 **`vX.Y.Z`** 形式的 tag（如 `v0.0.1`）时自动：
+
+1. 下载并缓存 MounRiver 官方 Linux 工具链（V1.92，无需本机 `obj/`）；
+2. 把 tag 版本写入 `User/ota_config.h` 的 `OTA_FW_VERSION`，**固件内上报的版本就是 tag 版本**；
+3. 写入 secret 中的签名私钥后执行 `make`：一次完成 App + Bootloader 编译、合并
+   `build/dtu-full.hex`；
+4. 同一次 `make` 用该私钥签名并自检，生成 `build/dtu-X.Y.Z.dtufw`；
+5. 上传 Artifact 并创建同名 Release（附 `.dtufw` 与 `dtu-full.hex`）。
+
+**一次性配置密钥**：GitHub 仓库 `Settings → Secrets and variables → Actions →
+New repository secret`，名称 `FW_SIGNING_KEY`，值粘贴私钥 PEM 全文
+（`-----BEGIN … PRIVATE KEY-----` 到 `-----END …-----`）。私钥必须与
+`User/ota_pubkey.h` 内嵌公钥匹配，否则工作流会在密钥一致性检查处直接失败。
+
+发布：
+
+```sh
+git tag -a v0.2.0 -m "fw 0.2.0"
+git push origin v0.2.0
+```
+
+也可在 Actions 页面手动运行 `Release Firmware`（workflow_dispatch，填版本号 `X.Y.Z`）：
+只构建并上传 Artifact，不创建 Release，用于上线前验证。
+
 ---
 
 ## 7. 烧写：初次 vs 后续
@@ -272,7 +338,7 @@ python3 tools/mkfw.py --hex obj/dtu-ethernet-ble-demo.hex \
 |---|---|---|
 | `build/dtu-full.hex` | Bootloader + App，**不含 Meta** | 初次烧写（SWD 一次写入） |
 | `Bootloader/build/bootloader.hex` | 仅 Bootloader（`0x0–0x2FFF`） | 只安装/修复 Bootloader |
-| `obj/dtu-ethernet-ble-demo.hex` | 仅 App（`0x3000` 起） | 开发调试时 SWD 直接烧 App |
+| `build/app/dtu-ethernet-ble-demo.hex` | 仅 App（`0x3000` 起） | 开发调试时 SWD 直接烧 App（MRS 构建则在 `obj/`） |
 | `build/dtu-<ver>.dtufw` | 512 B 包头 + App 镜像 + 签名 | 串口 IAP / 网络 OTA 的唯一升级对象 |
 
 记住两条原则：
@@ -716,7 +782,12 @@ export PATH="$MRS_BIN:$PATH"
 ./merge-image.sh                                 # build/dtu-full.hex
 ./pack-firmware.sh --version 0.2.0 --key tools/keys/dev_private.pem
 
-# 编译
+# 编译（推荐，不依赖 obj/）
+make -j"$(nproc 2>/dev/null || sysctl -n hw.ncpu)"   # App + Boot + 两个烧写产物
+make image                         # 只合并 build/dtu-full.hex
+make fw FW_KEY=prod_private.pem    # 只打包 build/dtu-<ver>.dtufw
+
+# 编译（MRS 的 obj/）
 make -C Bootloader                 # Bootloader + 12 KB 检查
 make -C obj all                    # App（需 MRS 先构建过）
 

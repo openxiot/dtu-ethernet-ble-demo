@@ -50,11 +50,13 @@ tools/                   打包、构建与升级工具（Python 3 / Shell）
   merge_hex.py           合并 Boot + App，供产线烧录
   ota_uart.py            串口 IAP 主机端
   keys/                  开发用密钥（私钥被 .gitignore 忽略）
+Makefile                 App 便携构建（不依赖 MRS 的 obj/，输出 build/app/）
 build-all.sh             一键构建：Boot + App + 合并 + 打包
 build-bootloader.sh      构建 Bootloader（校验 12 KB 上限）
 build-app.sh             构建 App（校验 0x3000 起始 / 148 KB 上限）
 merge-image.sh           生成 build/dtu-full.hex
 pack-firmware.sh         生成 build/dtu-<ver>.dtufw
+.github/workflows/       CI：推送 vX.Y.Z tag 自动编译、签名并发布 Release
 Net/                     以太网协议栈（已拷入 WCH 官方 NetLib）
   NetLib/                wchnet.h / libwchnet.a / eth_driver.c / eth_driver.h
   net_config.h           协议栈配置（TCP 数量、MSS、缓冲等）
@@ -101,6 +103,10 @@ doc/说明.md              板卡说明、WCH-LINK 接线
 3. **构建**：右键工程 → `Build Project`（或 `ReBuild Project`）。`obj/` 不入库，由 MRS 自动生成，
    产物 `obj/dtu-ethernet-ble-demo.hex`。`Bootloader/` 已在工程中排除，不会混入 App 构建。
    命令行可用 `./build-app.sh`（自动定位工具链并校验分区），或一键 `./build-all.sh`。
+   不依赖 MRS 的 `obj/` 时可直接 `make`（工具链需在 `PATH` 或用 `CROSS=` 指定）：
+   一次生成 `build/dtu-full.hex`（Bootloader + App，首次烧写）与
+   `build/dtu-<版本>.dtufw`（仅 App + 签名，串口 IAP / 网络 OTA）；
+   没有签名私钥时只跳过 `.dtufw`，其余照常构建。
 4. **烧录接线（WCH-Link）**：
 
    | WCH-LINK | 板子 |
@@ -156,6 +162,8 @@ App 仍用 MounRiver IDE 构建（新增的 `User/ota_*.c` 位于工程源目录
 先用 `User/ota_config.h` 的 `OTA_FW_VERSION` 定义新版本并重新编译，再打包：
 
 ```sh
+make fw                            # 先 make 构建 App，再打包：build/dtu-<版本>.dtufw
+make fw FW_KEY=prod_private.pem    # 指定私钥（默认自动查找 prod_private.pem / dev 私钥）
 ./pack-firmware.sh                 # 版本默认取 OTA_FW_VERSION，默认 dev 私钥
 ./pack-firmware.sh --version 0.2.0 --key prod_private.pem
 ```
@@ -222,6 +230,30 @@ Staging，校验 CRC32/SHA-256 与 RSA 签名，写 Meta=STAGED 后复位；Boot
   停在串口等待升级。
 - 搬运过程中掉电不影响 Staging：Meta 停在 COPYING，下次启动重新搬运并校验。
 - RECOVERY/EMPTY：无限等待串口 IAP。
+
+### 5.8 自动发布（GitHub Actions，按 tag）
+
+推送形如 **`v0.0.1`** 的 tag（三段数字、前面加 `v`）会触发
+[`.github/workflows/release.yml`](.github/workflows/release.yml)：
+
+1. 下载并缓存 MounRiver 官方 Linux 工具链（V1.92，无需本机 `obj/`）；
+2. 把 tag 版本写入 `User/ota_config.h` 的 `OTA_FW_VERSION`（固件内上报的版本即 tag 版本）；
+3. 写入 Repository secret `FW_SIGNING_KEY` 后执行 `make`：编译 Bootloader + App，
+   合并 `build/dtu-full.hex`；
+4. 同一次 `make` 用该私钥签名并自检，生成 `build/dtu-X.Y.Z.dtufw`；
+5. 上传 Artifact，并创建同名 GitHub Release（附 `.dtufw` 与 `dtu-full.hex`）。
+
+一次性配置：仓库 `Settings → Secrets and variables → Actions → New repository secret`，
+名称 `FW_SIGNING_KEY`，值粘贴 RSA-2048 私钥 PEM 全文（含 `-----BEGIN…` 行）。
+该私钥必须与 `User/ota_pubkey.h` 内嵌公钥配对，否则工作流会直接失败（网络 OTA 验签不通过）。
+
+```sh
+git tag -a v0.2.0 -m "fw 0.2.0"
+git push origin v0.2.0        # 触发 CI 编译、签名并发布 Release
+```
+
+Actions 页面也可手动运行 `Release Firmware`（workflow_dispatch）：只构建并上传 Artifact，
+不创建 Release，适合上线前验证流程。
 
 ---
 

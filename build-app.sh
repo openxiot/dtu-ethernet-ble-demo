@@ -12,6 +12,7 @@
 #   App 使用 MounRiver Studio 生成的 obj/ 构建文件（makefile、subdir.mk），
 #   这些文件与绝对路径相关且不入库。新克隆仓库或移动目录后，
 #   请先在 MRS 里对工程执行一次 Build，生成本机可用的 obj/。
+#   不想打开 MRS 时，直接用仓库根目录的 `make`（输出 build/app/，见 Makefile）。
 set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/tools/build-env.sh"

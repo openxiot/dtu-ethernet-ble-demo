@@ -12,7 +12,11 @@
 #   --allow-downgrade     允许降级（设备默认拒绝版本号不增加的包）
 #   -o, --output FILE     输出文件，默认 build/dtu-X.Y.Z.dtufw
 #
-# 打包前请先运行 ./build-app.sh，确保 obj/ 下的 hex 是最新构建。
+# 环境变量：
+#   APP_HEX                App 镜像 hex，默认 obj/dtu-ethernet-ble-demo.hex
+#   FW_REQUIRE_KEY_MATCH   设为 1 时，私钥与内嵌公钥不一致即失败（CI 发布用）
+#
+# 打包前请先运行 ./build-app.sh（或 make），确保 hex 是最新构建。
 set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/tools/build-env.sh"
@@ -62,8 +66,10 @@ printf '%s\n' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' \
 case "$KEY" in /*) ;; *) KEY="$ROOT_DIR/$KEY" ;; esac
 [ -f "$KEY" ] || die "找不到签名私钥 ${KEY}。请用 --key 指定，或设置 FW_KEY；/tools/keys/*.pem 不入库。"
 
-APP_HEX="$ROOT_DIR/obj/dtu-ethernet-ble-demo.hex"
-[ -f "$APP_HEX" ] || die "缺少 ${APP_HEX}（先运行 ./build-app.sh）"
+# 可用环境变量 APP_HEX 指向其他构建产物（如 make 生成的 build/app/*.hex）。
+APP_HEX=${APP_HEX:-$ROOT_DIR/obj/dtu-ethernet-ble-demo.hex}
+case "$APP_HEX" in /*) ;; *) APP_HEX="$ROOT_DIR/$APP_HEX" ;; esac
+[ -f "$APP_HEX" ] || die "缺少 ${APP_HEX}（先运行 ./build-app.sh 或 make）"
 
 if [ -z "$OUT" ]; then
     OUT="$ROOT_DIR/build/dtu-$VERSION.dtufw"
@@ -94,13 +100,18 @@ if [ -n "$NEWER" ]; then
 fi
 
 # 网络 OTA 用 App 内嵌的公钥验签；私钥不匹配时打包仍可用于串口 IAP。
+# 设置 FW_REQUIRE_KEY_MATCH=1 时，无法确认一致即失败（CI 发布用）。
 check_embedded_key() {
     local hdr="$ROOT_DIR/User/ota_pubkey.h" key_sha emb_sha
+    local strict=${FW_REQUIRE_KEY_MATCH:-0}
     [ -f "$hdr" ] || { warn "缺少 ${hdr}，跳过密钥一致性检查"; return 0; }
 
     key_sha=$(openssl pkey -in "$KEY" -pubout -outform DER 2>/dev/null \
               | openssl dgst -sha256 2>/dev/null | awk '{print $NF}') || true
     if [ -z "$key_sha" ]; then
+        if [ "$strict" = 1 ]; then
+            die "无法从 $KEY 导出公钥，无法确认与 User/ota_pubkey.h 一致（FW_REQUIRE_KEY_MATCH=1）"
+        fi
         warn "无法从 $KEY 导出公钥，跳过与 User/ota_pubkey.h 的一致性检查"
         return 0
     fi
@@ -119,6 +130,9 @@ PY
     if [ -z "$emb_sha" ]; then
         warn "无法解析 User/ota_pubkey.h，跳过密钥一致性检查"
     elif [ "$key_sha" != "$emb_sha" ]; then
+        if [ "$strict" = 1 ]; then
+            die "签名私钥与 App 内嵌公钥（User/ota_pubkey.h）不一致，网络 OTA 会验签失败。请改用匹配的私钥，或用 tools/pubkey2h.py 重新生成 User/ota_pubkey.h 后重新编译 App。"
+        fi
         warn "签名私钥与 App 内嵌公钥（User/ota_pubkey.h）不一致："
         warn "  - 串口 IAP 不验签，这个包仍可用于串口升级；"
         warn "  - 网络 OTA 会验签失败。请改用匹配的私钥（--key <PEM>），或用 tools/pubkey2h.py 重新生成 User/ota_pubkey.h 后重新编译 App。"

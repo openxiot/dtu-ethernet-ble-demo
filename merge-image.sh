@@ -24,11 +24,14 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-BOOT_HEX="$ROOT_DIR/Bootloader/build/bootloader.hex"
-APP_HEX="$ROOT_DIR/obj/dtu-ethernet-ble-demo.hex"
+# 可用环境变量 BOOT_HEX / APP_HEX 指向其他构建产物（如 make 生成的 build/app/*.hex）。
+BOOT_HEX=${BOOT_HEX:-$ROOT_DIR/Bootloader/build/bootloader.hex}
+APP_HEX=${APP_HEX:-$ROOT_DIR/obj/dtu-ethernet-ble-demo.hex}
+case "$BOOT_HEX" in /*) ;; *) BOOT_HEX="$ROOT_DIR/$BOOT_HEX" ;; esac
+case "$APP_HEX"  in /*) ;; *) APP_HEX="$ROOT_DIR/$APP_HEX"  ;; esac
 
-[ -f "$BOOT_HEX" ] || die "缺少 ${BOOT_HEX}（先运行 ./build-bootloader.sh）"
-[ -f "$APP_HEX" ]  || die "缺少 ${APP_HEX}（先运行 ./build-app.sh）"
+[ -f "$BOOT_HEX" ] || die "缺少 ${BOOT_HEX}（先运行 ./build-bootloader.sh 或 make -C Bootloader）"
+[ -f "$APP_HEX" ]  || die "缺少 ${APP_HEX}（先运行 ./build-app.sh 或 make）"
 
 case "$OUT" in
     /*) ;;
